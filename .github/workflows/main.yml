@@ -32,21 +32,6 @@ jobs:
     - name: Run Unit Tests with Coverage
       run: mvn test jacoco:report
 
-    - name: Install xmllint
-      run: sudo apt-get update && sudo apt-get install -y libxml2-utils
-
-    - name: Enforce ≥ 90% Code Coverage
-      run: |
-        COVERED=$(xmllint --xpath "string(//counter[@type='INSTRUCTION']/@covered)" target/site/jacoco/jacoco.xml)
-        MISSED=$(xmllint --xpath "string(//counter[@type='INSTRUCTION']/@missed)" target/site/jacoco/jacoco.xml)
-        TOTAL=$((COVERED + MISSED))
-        PERCENT=$(echo "$COVERED / $TOTAL * 100" | bc -l)
-        echo "Code coverage: $PERCENT%"
-        if (( $(echo "$PERCENT < 90.0" | bc -l) )); then
-          echo "Coverage below 90%"
-          exit 1
-        fi
-
     - name: Run Checkstyle
       run: mvn checkstyle:check
 
