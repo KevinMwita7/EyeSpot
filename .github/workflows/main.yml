@@ -1,0 +1,54 @@
+name: Java CI with Lint, Tests, Coverage, and Static Analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Cache Maven dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-maven
+
+    - name: Run Spotless (Lint)
+      run: mvn spotless:check
+
+    - name: Run Unit Tests with Coverage
+      run: mvn test jacoco:report
+
+    - name: Enforce ≥ 90% Code Coverage
+      run: |
+        COVERED=$(xmllint --xpath "string(//counter[@type='INSTRUCTION']/@covered)" target/site/jacoco/jacoco.xml)
+        MISSED=$(xmllint --xpath "string(//counter[@type='INSTRUCTION']/@missed)" target/site/jacoco/jacoco.xml)
+        TOTAL=$((COVERED + MISSED))
+        PERCENT=$(echo "$COVERED / $TOTAL * 100" | bc -l)
+        echo "Code coverage: $PERCENT%"
+        if (( $(echo "$PERCENT < 90.0" | bc -l) )); then
+          echo "Coverage below 90%"
+          exit 1
+        fi
+
+    - name: Run Checkstyle
+      run: mvn checkstyle:check
+
+    - name: Run PMD
+      run: mvn pmd:check
+
+    - name: Run SpotBugs
+      run: mvn com.github.spotbugs:spotbugs-maven-plugin:check
