@@ -355,4 +355,13 @@ public class BitmapParser implements IParser {
   public boolean hasColourPalette() {
     return dibHeader.getBitsPerPixel() <= 8; // Typically for 1, 4, or 8 bpp
   }
+
+  /**
+   * Determines if a colour palette has an alpha channel.
+   *
+   * @return true if alpha channel is present in the colour palette and false otherwise
+   */
+  public boolean hasAlphaChannel() {
+    return Objects.requireNonNull(colourPalette).hasAlphaChannel();
+  }
 }
