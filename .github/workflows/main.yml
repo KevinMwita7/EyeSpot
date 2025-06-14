@@ -32,6 +32,9 @@ jobs:
     - name: Run Unit Tests with Coverage
       run: mvn test jacoco:report
 
+    - name: Install xmllint
+      run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+
     - name: Enforce ≥ 90% Code Coverage
       run: |
         COVERED=$(xmllint --xpath "string(//counter[@type='INSTRUCTION']/@covered)" target/site/jacoco/jacoco.xml)
