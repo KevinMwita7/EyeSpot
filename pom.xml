@@ -1,23 +1,119 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>org.example</groupId>
+  <groupId>dev.eyespot</groupId>
   <artifactId>EyeSpot</artifactId>
   <version>1.0-SNAPSHOT</version>
   <name>Archetype - EyeSpot</name>
   <url>http://maven.apache.org</url>
+  <packaging>jar</packaging>
+
+  <properties>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <spotless.version>2.17.5</spotless.version>
+    <jacoco.version>0.8.10</jacoco.version>
+    <checkstyle.version>3.2.2</checkstyle.version>
+    <pmd.version>3.15.0</pmd.version>
+    <spotbugs.version>4.7.3.0</spotbugs.version>
+  </properties>
 
   <build>
     <plugins>
+      <!-- Spotless: Lint Formatting -->
       <plugin>
         <groupId>com.diffplug.spotless</groupId>
         <artifactId>spotless-maven-plugin</artifactId>
-        <version>2.43.0</version>
+        <version>${spotless.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
         <configuration>
           <java>
-            <googleJavaFormat/>
+            <googleJavaFormat />
           </java>
         </configuration>
+      </plugin>
+
+      <!-- JaCoCo: Test Coverage -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Checkstyle -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>${checkstyle.version}</version>
+        <configuration>
+          <configLocation>google_checks.xml</configLocation>
+          <failOnViolation>true</failOnViolation>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- PMD -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-pmd-plugin</artifactId>
+        <version>${pmd.version}</version>
+        <configuration>
+          <failOnViolation>true</failOnViolation>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- SpotBugs -->
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <version>${spotbugs.version}</version>
+        <configuration>
+          <failOnError>true</failOnError>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
