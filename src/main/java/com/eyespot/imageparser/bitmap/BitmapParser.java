@@ -41,18 +41,13 @@ public class BitmapParser implements IParser {
   /** The bitmap colour palette, if present. */
   private final ColourPalette colourPalette;
 
-  /** The pixel row size. */
-  private final int pixelRowSize;
-
-  /** The pixel array size */
-  private final int pixelArraySize;
-
   /** Represents the BITMAPFILEHEADER structure (14 bytes). */
   private static class Header {
     final ImageType type;
     final int size;
     final int offset; // Offset to actual image data
-    final short reserved1, reserved2;
+    final short reserved1;
+    final short reserved2;
 
     private Header(byte[] data) {
       if (data.length < BitmapConstants.FILE_HEADER_SIZE) {
@@ -93,10 +88,10 @@ public class BitmapParser implements IParser {
         throw new IllegalArgumentException("Colour palette is not expected for bit depth > 8.");
       }
 
-      int numEntries = dibHeader.getNColours();
+      int numEntries = 0;
       // If the number of colors in the color palette is 0, default to 2^n
       // n == bits per pixel
-      if (numEntries == 0) {
+      if (dibHeader.getNColours() == 0) {
         numEntries = 1 << dibHeader.getBitsPerPixel(); // Max colours for bit depth
       }
 
@@ -104,7 +99,7 @@ public class BitmapParser implements IParser {
       int bytesPerPaletteEntry;
 
       // Determine bytes per palette entry based on DIB header type
-      if (dibHeader.getType() == InfoHeaderType.BITMAPCOREHEADER) {
+      if (InfoHeaderType.BITMAPCOREHEADER.equals(dibHeader.getType())) {
         // RGBTRIPLE (no 4th byte for alpha)
         bytesPerPaletteEntry = 3;
       } else {
@@ -218,11 +213,14 @@ public class BitmapParser implements IParser {
 
     this.header = new Header(this.data);
     this.dibHeader = createDIBHeader(this.data);
-    this.pixelRowSize = (int) (Math.ceil((this.getBitsPerPixel() * this.getWidth()) / 32.0) * 4);
-    this.pixelArraySize = this.pixelRowSize * Math.abs(this.getHeight());
 
     if (this.hasColourPalette()) {
-      int bitmask = dibHeader.getCompression() == 3 ? 12 : dibHeader.getCompression() == 6 ? 16 : 0;
+      int bitmask = 0;
+      if (dibHeader.getCompression() == 3) {
+        bitmask = 12;
+      } else if (dibHeader.getCompression() == 6) {
+        bitmask = 16;
+      }
       int paletteStartOffset =
           BitmapConstants.FILE_HEADER_SIZE + this.dibHeader.getHeaderSize() + bitmask;
       this.colourPalette = new ColourPalette(this.data, this.dibHeader, paletteStartOffset);

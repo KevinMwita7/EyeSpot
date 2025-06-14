@@ -7,45 +7,42 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 class ImageUtilsTest {
 
-  static void GivenInvalidFilePath_ThrowsIOException() {
-    boolean ioExceptionThrown = false;
-
-    try {
-      ImageUtils.detectType(Paths.get(""));
-    } catch (IOException e) {
-      ioExceptionThrown = true;
-    }
-
-    assert ioExceptionThrown : "IOException thrown on invalid file path";
+  @Test
+  void GivenInvalidFilePath_ThrowsIOException() {
+    Assertions.assertThrows(IOException.class, () -> ImageUtils.detectType(Paths.get("")));
   }
 
-  static void GivenFilePath_ReturnsFileType_Bitmap() throws URISyntaxException, IOException {
+  @Test
+  void GivenFilePath_ReturnsFileType_Bitmap() throws URISyntaxException, IOException {
     URL resource = ImageUtilsTest.class.getClassLoader().getResource("sample_bmp.bmp");
-    assert resource != null;
+    Assertions.assertNotNull(resource);
 
-    ImageType type = ImageUtils.detectType(Paths.get(resource.toURI()));
-    assert ImageType.BITMAP.equals(type);
+    Assertions.assertEquals(ImageType.BITMAP, ImageUtils.detectType(Paths.get(resource.toURI())));
   }
 
-  static void GivenFileBytes_ReturnsFileType_Bitmap() throws URISyntaxException, IOException {
+  @Test
+  void GivenFileBytes_ReturnsFileType_Bitmap() throws URISyntaxException, IOException {
     URL resource = ImageUtilsTest.class.getClassLoader().getResource("sample_bmp.bmp");
-    assert resource != null;
+    Assertions.assertNotNull(resource);
 
     byte[] bytes = Files.readAllBytes(Paths.get(resource.toURI()));
-    ImageType type = ImageUtils.detectType(bytes);
-    assert ImageType.BITMAP.equals(type);
+    Assertions.assertEquals(ImageType.BITMAP, ImageUtils.detectType(bytes));
   }
 
-  public static void main(String[] args) {
-    try {
-      GivenInvalidFilePath_ThrowsIOException();
-      GivenFilePath_ReturnsFileType_Bitmap();
-      GivenFileBytes_ReturnsFileType_Bitmap();
-    } catch (Exception ex) {
-      System.out.println(ex);
-    }
+  @Test
+  void GivenBytes_ReadInt_Reads4BytesInLittleEndian() {
+    byte[] bytes = {(byte) 0xE8, 0x03, 0x00, 0x00};
+    Assertions.assertEquals(1000, ImageUtils.readInt(bytes, 0));
+  }
+
+  @Test
+  void GivenBytes_ReadShort_Reads2BytesInLittleEndian() {
+    byte[] bytes = {(byte) 0x0A, 0x00};
+    Assertions.assertEquals(10, ImageUtils.readShort(bytes, 0));
   }
 }
