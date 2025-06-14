@@ -171,8 +171,9 @@ public class BitmapParser implements IParser {
     }
 
     /**
-     * Returns true if the palette is believed to contain active alpha values
-     * (i.e. not all entries are fully opaque or strictly follow the "reserved=0" rule).
+     * Returns true if the palette is believed to contain active alpha values (i.e. not all entries
+     * are fully opaque or strictly follow the "reserved=0" rule).
+     *
      * @return true if alpha is likely present, else, return false.
      */
     public boolean hasAlphaChannel() {
