@@ -1,8 +1,7 @@
 package com.eyespot.imageparser.bitmap;
 
 import static com.eyespot.imageparser.util.ImageUtils.readInt;
-
-import com.eyespot.imageparser.util.ImageUtils;
+import static com.eyespot.imageparser.util.ImageUtils.readShort;
 
 public abstract class DIBHeader {
   protected final int headerSize;
@@ -19,7 +18,7 @@ public abstract class DIBHeader {
 
   // Common constructor to parse fields common to many DIB headers
   protected DIBHeader(byte[] data, int headerOffset) {
-    this.headerSize = ImageUtils.readInt(data, headerOffset);
+    this.headerSize = readInt(data, headerOffset);
     if (data.length < BitmapConstants.FILE_HEADER_SIZE + headerSize) {
       throw new IllegalArgumentException(
           "Byte array too short for declared DIB header size: " + headerSize);
@@ -27,13 +26,10 @@ public abstract class DIBHeader {
 
     // Is BITMAPCOREHEADER
     if (this.headerSize == BitmapConstants.BITMAPCOREHEADER_SIZE) {
-      this.width = ImageUtils.readShort(data, headerOffset + BitmapConstants.BI_CORE_WIDTH_OFFSET);
-      this.height =
-          ImageUtils.readShort(data, headerOffset + BitmapConstants.BI_CORE_HEIGHT_OFFSET);
-      this.colourPlanes =
-          ImageUtils.readShort(data, headerOffset + BitmapConstants.BI_CORE_PLANES_OFFSET);
-      this.bitsPerPixel =
-          ImageUtils.readShort(data, headerOffset + BitmapConstants.BI_CORE_BITCOUNT_OFFSET);
+      this.width = readShort(data, headerOffset + BitmapConstants.BI_CORE_WIDTH_OFFSET);
+      this.height = readShort(data, headerOffset + BitmapConstants.BI_CORE_HEIGHT_OFFSET);
+      this.colourPlanes = readShort(data, headerOffset + BitmapConstants.BI_CORE_PLANES_OFFSET);
+      this.bitsPerPixel = readShort(data, headerOffset + BitmapConstants.BI_CORE_BITCOUNT_OFFSET);
       this.compression = 0;
       this.imageSize = 0;
       this.xResolution = 0;
@@ -44,28 +40,23 @@ public abstract class DIBHeader {
     }
 
     // Is BITMAPINFOHEADER and later
-    this.width = ImageUtils.readInt(data, headerOffset + BitmapConstants.BI_WIDTH_OFFSET);
-    this.height = ImageUtils.readInt(data, headerOffset + BitmapConstants.BI_HEIGHT_OFFSET);
-    this.colourPlanes = ImageUtils.readShort(data, headerOffset + BitmapConstants.BI_PLANES_OFFSET);
-    this.bitsPerPixel =
-        ImageUtils.readShort(data, headerOffset + BitmapConstants.BI_BITCOUNT_OFFSET);
-    this.compression =
-        ImageUtils.readInt(data, headerOffset + BitmapConstants.BI_COMPRESSION_OFFSET);
+    this.width = readInt(data, headerOffset + BitmapConstants.BI_WIDTH_OFFSET);
+    this.height = readInt(data, headerOffset + BitmapConstants.BI_HEIGHT_OFFSET);
+    this.colourPlanes = readShort(data, headerOffset + BitmapConstants.BI_PLANES_OFFSET);
+    this.bitsPerPixel = readShort(data, headerOffset + BitmapConstants.BI_BITCOUNT_OFFSET);
+    this.compression = readInt(data, headerOffset + BitmapConstants.BI_COMPRESSION_OFFSET);
 
-    int rawImageSize = ImageUtils.readInt(data, headerOffset + BitmapConstants.BI_SIZEIMAGE_OFFSET);
+    int rawImageSize = readInt(data, headerOffset + BitmapConstants.BI_SIZEIMAGE_OFFSET);
     if (rawImageSize == 0 && this.compression == 0) { // BI_RGB (uncompressed)
       this.imageSize = calculateBitmapDataSize(this.width, this.height, this.bitsPerPixel);
     } else {
       this.imageSize = rawImageSize;
     }
 
-    this.xResolution =
-        ImageUtils.readInt(data, headerOffset + BitmapConstants.BI_X_PELS_PER_METER_OFFSET);
-    this.yResolution =
-        ImageUtils.readInt(data, headerOffset + BitmapConstants.BI_Y_PELS_PER_METER_OFFSET);
-    this.nColours = ImageUtils.readInt(data, headerOffset + BitmapConstants.BI_CLR_USED_OFFSET);
-    this.importantColours =
-        ImageUtils.readInt(data, headerOffset + BitmapConstants.BI_CLR_IMPORTANT_OFFSET);
+    this.xResolution = readInt(data, headerOffset + BitmapConstants.BI_X_PELS_PER_METER_OFFSET);
+    this.yResolution = readInt(data, headerOffset + BitmapConstants.BI_Y_PELS_PER_METER_OFFSET);
+    this.nColours = readInt(data, headerOffset + BitmapConstants.BI_CLR_USED_OFFSET);
+    this.importantColours = readInt(data, headerOffset + BitmapConstants.BI_CLR_IMPORTANT_OFFSET);
   }
 
   /** Factory method to create the correct DIBHeader subclass based on header size. */
