@@ -1,8 +1,10 @@
 package com.eyespot.imageparser.bitmap;
 
+import static com.eyespot.imageparser.util.ImageUtils.readInt;
+
 import com.eyespot.imageparser.util.ImageUtils;
 
-abstract class DIBHeader {
+public abstract class DIBHeader {
   protected final int headerSize;
   protected final int width;
   protected final int height;
@@ -10,14 +12,18 @@ abstract class DIBHeader {
   protected final short bitsPerPixel;
   protected final int compression;
   protected final int imageSize; // This should be the *actual* image size
-  protected final int xResolution, yResolution;
+  protected final int xResolution;
+  protected final int yResolution;
   protected final int nColours;
   protected final int importantColours;
 
   // Common constructor to parse fields common to many DIB headers
   protected DIBHeader(byte[] data, int headerOffset) {
-    // Should be 14 for first DIB field
     this.headerSize = ImageUtils.readInt(data, headerOffset);
+    if (data.length < BitmapConstants.FILE_HEADER_SIZE + headerSize) {
+      throw new IllegalArgumentException(
+          "Byte array too short for declared DIB header size: " + headerSize);
+    }
 
     // Is BITMAPCOREHEADER
     if (this.headerSize == BitmapConstants.BITMAPCOREHEADER_SIZE) {
@@ -28,12 +34,12 @@ abstract class DIBHeader {
           ImageUtils.readShort(data, headerOffset + BitmapConstants.BI_CORE_PLANES_OFFSET);
       this.bitsPerPixel =
           ImageUtils.readShort(data, headerOffset + BitmapConstants.BI_CORE_BITCOUNT_OFFSET);
-      compression = 0;
-      imageSize = 0;
-      xResolution = 0;
-      yResolution = 0;
-      nColours = 0;
-      importantColours = 0;
+      this.compression = 0;
+      this.imageSize = 0;
+      this.xResolution = 0;
+      this.yResolution = 0;
+      this.nColours = 0;
+      this.importantColours = 0;
       return;
     }
 
@@ -60,6 +66,33 @@ abstract class DIBHeader {
     this.nColours = ImageUtils.readInt(data, headerOffset + BitmapConstants.BI_CLR_USED_OFFSET);
     this.importantColours =
         ImageUtils.readInt(data, headerOffset + BitmapConstants.BI_CLR_IMPORTANT_OFFSET);
+  }
+
+  /** Factory method to create the correct DIBHeader subclass based on header size. */
+  public static DIBHeader createDIBHeader(byte[] data) {
+    // DIB header starts after file header
+    int dibHeaderFileOffset = BitmapConstants.FILE_HEADER_SIZE;
+
+    // Read the biSize field from the DIB header
+    int headerSize = readInt(data, dibHeaderFileOffset);
+
+    // Determine which DIBHeader type to instantiate
+    switch (headerSize) {
+      case BitmapConstants.BITMAPCOREHEADER_SIZE: // 12 bytes
+        return new BitmapCoreHeader(data, dibHeaderFileOffset);
+      case BitmapConstants.BITMAPINFOHEADER_SIZE: // 40 bytes
+        return new BitmapInfoHeader(data, dibHeaderFileOffset);
+      case BitmapConstants.BITMAPV2INFOHEADER_SIZE: // 52 bytes
+        return new BitmapV2InfoHeader(data, dibHeaderFileOffset);
+      case BitmapConstants.BITMAPV3INFOHEADER_SIZE: // 56 bytes
+        return new BitmapV3InfoHeader(data, dibHeaderFileOffset);
+      case BitmapConstants.BITMAPV4HEADER_SIZE: // 108 bytes
+        return new BitmapV4Header(data, dibHeaderFileOffset);
+      case BitmapConstants.BITMAPV5HEADER_SIZE: // 124 bytes
+        return new BitmapV5Header(data, dibHeaderFileOffset);
+      default:
+        throw new IllegalArgumentException("Unknown or unsupported DIB header size: " + headerSize);
+    }
   }
 
   // Abstract method to get the specific InfoHeaderType

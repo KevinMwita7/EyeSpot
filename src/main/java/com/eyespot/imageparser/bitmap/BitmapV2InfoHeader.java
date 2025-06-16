@@ -18,11 +18,6 @@ public class BitmapV2InfoHeader extends BitmapInfoHeader {
     // Parse V2-specific fields
     int currentOffset = dibHeaderFileOffset + BitmapConstants.BITMAPINFOHEADER_SIZE;
 
-    // Basic bounds check
-    if (data.length < currentOffset + 12) { // 3 masks * 4 bytes each
-      throw new IllegalArgumentException("Byte array too short for BITMAPV2INFOHEADER masks.");
-    }
-
     // Note: Couldn't find BITMAPV2INFOHEADER docs but generally it's often considered to only add
     // RGB masks.
     this.redMask = readInt(data, currentOffset);

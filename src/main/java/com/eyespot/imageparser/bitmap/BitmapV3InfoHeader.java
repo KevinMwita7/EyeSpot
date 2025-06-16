@@ -7,7 +7,7 @@ import static com.eyespot.imageparser.util.ImageUtils.readInt;
  * BITMAPV2INFOHEADER. (Undocumented by Microsoft)
  */
 public class BitmapV3InfoHeader extends BitmapV2InfoHeader {
-  protected final int alphaMask;
+  protected final long alphaMask;
 
   protected BitmapV3InfoHeader(byte[] data, int dibHeaderFileOffset) {
     // Parse V2-specific fields
@@ -16,12 +16,7 @@ public class BitmapV3InfoHeader extends BitmapV2InfoHeader {
     // Parse V3-specific field
     int currentOffset = dibHeaderFileOffset + BitmapConstants.BITMAPV2INFOHEADER_SIZE;
 
-    // Basic bounds check
-    if (data.length < currentOffset + 4) {
-      throw new IllegalArgumentException("Byte array too short for BITMAPV3INFOHEADER alpha mask.");
-    }
-
-    this.alphaMask = readInt(data, currentOffset);
+    this.alphaMask = 0xFFFFFFFFL & readInt(data, currentOffset);
   }
 
   @Override
@@ -29,7 +24,7 @@ public class BitmapV3InfoHeader extends BitmapV2InfoHeader {
     return InfoHeaderType.BITMAPV3INFOHEADER;
   }
 
-  public int getAlphaMask() {
+  public long getAlphaMask() {
     return alphaMask;
   }
 }

@@ -13,7 +13,7 @@ public class BitmapV5Header extends BitmapV4Header {
   private final int profileSize;
   private final int reservedV5;
 
-  public BitmapV5Header(byte[] data, int headerOffset) {
+  protected BitmapV5Header(byte[] data, int headerOffset) {
     super(data, headerOffset); // Parse V4-specific fields
 
     // Parse V5-specific fields

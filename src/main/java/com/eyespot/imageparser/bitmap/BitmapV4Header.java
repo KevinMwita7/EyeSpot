@@ -11,14 +11,14 @@ public class BitmapV4Header extends BitmapInfoHeader {
   private final int redMask;
   private final int greenMask;
   private final int blueMask;
-  private final int alphaMask;
+  private final long alphaMask;
   private final int csType;
   private final CIEXYZTriple endpoints; // You'd need a CIEXYZTriple class
   private final int gammaRed;
   private final int gammaGreen;
   private final int gammaBlue;
 
-  public BitmapV4Header(byte[] data, int headerOffset) {
+  protected BitmapV4Header(byte[] data, int headerOffset) {
     super(data, headerOffset); // Parse common fields first
 
     // Parse V4-specific fields
@@ -28,7 +28,7 @@ public class BitmapV4Header extends BitmapInfoHeader {
     this.redMask = ImageUtils.readInt(data, currentOffset);
     this.greenMask = ImageUtils.readInt(data, currentOffset + 4);
     this.blueMask = ImageUtils.readInt(data, currentOffset + 8);
-    this.alphaMask = ImageUtils.readInt(data, currentOffset + 12);
+    this.alphaMask = 0xFFFFFFFFL & ImageUtils.readInt(data, currentOffset + 12);
     this.csType = ImageUtils.readInt(data, currentOffset + 16); // bV4CSType
 
     // Parse CIEXYZTriple (36 bytes: 3 CIEXYZ structs, each 3 ints)
@@ -68,7 +68,7 @@ public class BitmapV4Header extends BitmapInfoHeader {
     return blueMask;
   }
 
-  public int getAlphaMask() {
+  public long getAlphaMask() {
     return alphaMask;
   }
 
@@ -94,9 +94,15 @@ public class BitmapV4Header extends BitmapInfoHeader {
 
   // --- Inner class for CIEXYZTriple ---
   public static class CIEXYZTriple {
-    private final int redX, redY, redZ;
-    private final int greenX, greenY, greenZ;
-    private final int blueX, blueY, blueZ;
+    private final int redX;
+    private final int redY;
+    private final int redZ;
+    private final int greenX;
+    private final int greenY;
+    private final int greenZ;
+    private final int blueX;
+    private final int blueY;
+    private final int blueZ;
 
     public CIEXYZTriple(int rx, int ry, int rz, int gx, int gy, int gz, int bx, int by, int bz) {
       this.redX = rx;
@@ -114,6 +120,37 @@ public class BitmapV4Header extends BitmapInfoHeader {
     public int getRedX() {
       return redX;
     }
-    // ... and so on for all 9 components
+
+    public int getRedY() {
+      return redY;
+    }
+
+    public int getRedZ() {
+      return redZ;
+    }
+
+    public int getGreenX() {
+      return greenX;
+    }
+
+    public int getGreenY() {
+      return greenY;
+    }
+
+    public int getGreenZ() {
+      return greenZ;
+    }
+
+    public int getBlueX() {
+      return blueX;
+    }
+
+    public int getBlueY() {
+      return blueY;
+    }
+
+    public int getBlueZ() {
+      return blueZ;
+    }
   }
 }

@@ -45,4 +45,22 @@ class ImageUtilsTest {
     byte[] bytes = {(byte) 0x0A, 0x00};
     Assertions.assertEquals(10, ImageUtils.readShort(bytes, 0));
   }
+
+  @Test
+  void GivenBytes_IsEmpty_ReturnsUndetermined() {
+    byte[] bytes = null;
+    Assertions.assertEquals(ImageType.UNDETERMINED, ImageUtils.detectType(bytes));
+  }
+
+  @Test
+  void GivenBytes_IsShorterThan2Bytes_ReturnsUndetermined() {
+    byte[] bytes = {0x00};
+    Assertions.assertEquals(ImageType.UNDETERMINED, ImageUtils.detectType(bytes));
+  }
+
+  @Test
+  void GivenBytes_MissingBitmapMagicNumber_ReturnsUndetermined() {
+    byte[] bytes = {0x42, 0x34};
+    Assertions.assertEquals(ImageType.UNDETERMINED, ImageUtils.detectType(bytes));
+  }
 }

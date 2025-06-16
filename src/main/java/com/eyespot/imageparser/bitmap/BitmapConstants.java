@@ -1,6 +1,6 @@
 package com.eyespot.imageparser.bitmap;
 
-final class BitmapConstants {
+public final class BitmapConstants {
 
   // Private constructor to prevent instantiation
   private BitmapConstants() {}

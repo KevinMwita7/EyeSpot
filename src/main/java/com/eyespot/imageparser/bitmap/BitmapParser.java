@@ -212,7 +212,7 @@ public class BitmapParser implements IParser {
     }
 
     this.header = new Header(this.data);
-    this.dibHeader = createDIBHeader(this.data);
+    this.dibHeader = DIBHeader.createDIBHeader(this.data);
 
     if (this.hasColourPalette()) {
       int bitmask = 0;
@@ -226,38 +226,6 @@ public class BitmapParser implements IParser {
       this.colourPalette = new ColourPalette(this.data, this.dibHeader, paletteStartOffset);
     } else {
       this.colourPalette = null;
-    }
-  }
-
-  /** Factory method to create the correct DIBHeader subclass based on header size. */
-  private DIBHeader createDIBHeader(byte[] data) {
-    // DIB header starts after file header
-    int dibHeaderFileOffset = BitmapConstants.FILE_HEADER_SIZE;
-
-    // Read the biSize field from the DIB header
-    int headerSize = readInt(data, dibHeaderFileOffset + BitmapConstants.BI_SIZE_OFFSET);
-
-    if (data.length < dibHeaderFileOffset + headerSize) {
-      throw new IllegalArgumentException(
-          "Byte array too short for declared DIB header size: " + headerSize);
-    }
-
-    // Determine which DIBHeader type to instantiate
-    switch (headerSize) {
-      case BitmapConstants.BITMAPCOREHEADER_SIZE: // 12 bytes
-        return new BitmapCoreHeader(data, dibHeaderFileOffset);
-      case BitmapConstants.BITMAPINFOHEADER_SIZE: // 40 bytes
-        return new BitmapInfoHeader(data, dibHeaderFileOffset);
-      case BitmapConstants.BITMAPV2INFOHEADER_SIZE: // 52 bytes
-        return new BitmapV2InfoHeader(data, dibHeaderFileOffset);
-      case BitmapConstants.BITMAPV3INFOHEADER_SIZE: // 56 bytes
-        return new BitmapV3InfoHeader(data, dibHeaderFileOffset);
-      case BitmapConstants.BITMAPV4HEADER_SIZE: // 108 bytes
-        return new BitmapV4Header(data, dibHeaderFileOffset);
-      case BitmapConstants.BITMAPV5HEADER_SIZE: // 124 bytes
-        return new BitmapV5Header(data, dibHeaderFileOffset);
-      default:
-        throw new IllegalArgumentException("Unknown or unsupported DIB header size: " + headerSize);
     }
   }
 
@@ -327,20 +295,27 @@ public class BitmapParser implements IParser {
   }
 
   // You can add more specific getters for V4/V5 header fields with proper casting and checks
-  public int getAlphaMask() {
-    if (dibHeader
-        instanceof BitmapV4Header) { // V2/V3 might also have it depending on your exact definition
+  public long getAlphaMask() {
+    if (InfoHeaderType.BITMAPV3INFOHEADER.equals(dibHeader.getType())) {
+      return ((BitmapV3InfoHeader) dibHeader).getAlphaMask();
+    }
+    if (InfoHeaderType.BITMAPV4HEADER.equals(dibHeader.getType())) {
       return ((BitmapV4Header) dibHeader).getAlphaMask();
     }
+    if (InfoHeaderType.BITMAPV5HEADER.equals(dibHeader.getType())) {
+      return ((BitmapV5Header) dibHeader).getAlphaMask();
+    }
     // For earlier headers, the concept of a dedicated alpha mask doesn't exist
-    return 0; // Or throw UnsupportedOperationException
+    throw new UnsupportedOperationException(
+        String.format("No alpha mask for image with %s header", dibHeader.getType()));
   }
 
   public int getProfileSize() {
     if (dibHeader instanceof BitmapV5Header) {
       return ((BitmapV5Header) dibHeader).getProfileSize();
     }
-    return 0; // Or throw UnsupportedOperationException
+    throw new UnsupportedOperationException(
+        String.format("No profile size for image with %s header", dibHeader.getType()));
   }
 
   public int getHeaderSize() {
