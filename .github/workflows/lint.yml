@@ -19,8 +19,15 @@ jobs:
         java-version: '11'
         distribution: 'temurin'
 
-    - name: Run Spotless (Lint)
+    - name: Run Spotless
       run: mvn spotless:check
 
     - name: Run Checkstyle
       run: mvn checkstyle:check
+      
+    - name: Run PMD
+      run: mvn pmd:check
+
+    - name: Run SpotBugs
+      run: mvn com.github.spotbugs:spotbugs-maven-plugin:check
+      
