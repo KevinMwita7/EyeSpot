@@ -16,6 +16,8 @@ class BitmapParserTest {
 
   private static BitmapParser commonParser;
 
+  private static BitmapParser commonParserWithColourPalette;
+
   private static BitmapParser coreParser;
 
   private static BitmapParser v2Parser;
@@ -44,6 +46,12 @@ class BitmapParserTest {
     URL commonResource = BitmapParserTest.class.getClassLoader().getResource("sample_bmp.bmp");
     Assertions.assertNotNull(commonResource);
     commonParser = new BitmapParser(Paths.get(commonResource.toURI()));
+
+    URL commonWithColourPaletteResource =
+        BitmapParserTest.class.getClassLoader().getResource("bmp_common_w_colour_palette.bmp");
+    Assertions.assertNotNull(commonWithColourPaletteResource);
+    commonParserWithColourPalette =
+        new BitmapParser(Paths.get(commonWithColourPaletteResource.toURI()));
 
     infoHeader =
         (BitmapInfoHeader)
@@ -232,6 +240,16 @@ class BitmapParserTest {
   @Test
   void GivenCommonBitmapImageNoColourPalette_HasColourPalette_ReturnsFalse() {
     Assertions.assertFalse(commonParser.hasColourPalette());
+  }
+
+  @Test
+  void GivenCommonBitmapImageWithColourPalette_HasColourPalette_ReturnsTrue() {
+    Assertions.assertTrue(commonParserWithColourPalette.hasColourPalette());
+  }
+
+  @Test
+  void GivenCommonBitmapImageWithColourPalette_HasAlphaChannel_ReturnsTrue() {
+    Assertions.assertFalse(commonParserWithColourPalette.hasAlphaChannel());
   }
 
   @Test
