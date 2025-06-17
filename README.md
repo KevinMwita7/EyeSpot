@@ -1,4 +1,3 @@
-[![Build](https://github.com/KevinMwita7/EyeSpot/actions/workflows/main.yml/badge.svg)](https://github.com/KevinMwita7/EyeSpot/actions/workflows/main.yml)
-![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)
+[![Build](https://github.com/KevinMwita7/EyeSpot/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/KevinMwita7/EyeSpot/actions/workflows/build.yml)
 ![License](https://img.shields.io/github/license/eyespot/image-parser)
-![Java](https://img.shields.io/badge/java-17-blue)
+![Java](https://img.shields.io/badge/java-11-blue)

@@ -16,8 +16,11 @@ jobs:
     - name: Set up JDK
       uses: actions/setup-java@v4
       with:
-        java-version: '11'
+        java-version: '17'
         distribution: 'temurin'
 
     - name: Run Unit Tests with Coverage
-      run: mvn test jacoco:report
+      run: mvn clean test jacoco:report
+
+    - name: Coveralls
+      uses: coverallsapp/github-action@v2
