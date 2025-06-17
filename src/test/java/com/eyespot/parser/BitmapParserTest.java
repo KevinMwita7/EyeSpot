@@ -26,6 +26,8 @@ class BitmapParserTest {
 
   private static BitmapParser v4Parser;
 
+  private static BitmapParser v4ParserWithPaletteAndAlpha;
+
   private static BitmapV4Header v4Header;
 
   private static BitmapInfoHeader infoHeader;
@@ -93,6 +95,12 @@ class BitmapParserTest {
     v4Header =
         (BitmapV4Header)
             DIBHeader.createDIBHeader(Arrays.copyOfRange(v4Parser.getRawData(), 0, 122));
+
+    URL v4ResourceWithPaletteAndAlpha =
+        BitmapParserTest.class.getClassLoader().getResource("bmp_v4_palette_alpha.bmp");
+    Assertions.assertNotNull(v4ResourceWithPaletteAndAlpha);
+    v4ParserWithPaletteAndAlpha =
+        new BitmapParser(Paths.get(v4ResourceWithPaletteAndAlpha.toURI()));
 
     // Parser and header for bitmap with BITMAPV5HEADER
     URL v5Resource = BitmapParserTest.class.getClassLoader().getResource("32bit_v5.bmp");
@@ -487,6 +495,11 @@ class BitmapParserTest {
   @Test
   void GivenV4BitmapImage_GetColourPlanes_ReturnsCorrectValue() {
     Assertions.assertEquals(1, v4Header.getColourPlanes());
+  }
+
+  @Test
+  void GivenV4BitmapImageWithPaletteAndAlpha_HasAlphaChannel_ReturnsTrue() {
+    Assertions.assertTrue(v4ParserWithPaletteAndAlpha.hasAlphaChannel());
   }
 
   // Bitmap with BITMAPV5HEADER tests
