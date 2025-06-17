@@ -1,14 +1,13 @@
 package com.eyespot.parser;
 
 import com.eyespot.imageparser.ImageType;
+import com.eyespot.imageparser.bitmap.*;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
-
-import com.eyespot.imageparser.bitmap.*;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -47,8 +46,8 @@ class BitmapParserTest {
     commonParser = new BitmapParser(Paths.get(commonResource.toURI()));
 
     infoHeader =
-            (BitmapInfoHeader)
-                    DIBHeader.createDIBHeader(Arrays.copyOfRange(commonParser.getRawData(), 0, 54));
+        (BitmapInfoHeader)
+            DIBHeader.createDIBHeader(Arrays.copyOfRange(commonParser.getRawData(), 0, 54));
 
     // Parser and header for bitmap with BITMAPCOREHEADER
     URL coreResource = BitmapParserTest.class.getClassLoader().getResource("bmp_1000x500.bmp");
@@ -56,8 +55,8 @@ class BitmapParserTest {
     coreParser = new BitmapParser(Paths.get(coreResource.toURI()));
 
     coreHeader =
-            (BitmapCoreHeader)
-                    DIBHeader.createDIBHeader(Arrays.copyOfRange(coreParser.getRawData(), 0, 26));
+        (BitmapCoreHeader)
+            DIBHeader.createDIBHeader(Arrays.copyOfRange(coreParser.getRawData(), 0, 26));
 
     // Parser and header for bitmap with BITMAPV2INFOHEADER
     URL v2Resource = BitmapParserTest.class.getClassLoader().getResource("bmp_v2_500x250.bmp");
@@ -65,8 +64,8 @@ class BitmapParserTest {
     v2Parser = new BitmapParser(Paths.get(v2Resource.toURI()));
 
     v2InfoHeader =
-            (BitmapV2InfoHeader)
-                    DIBHeader.createDIBHeader(Arrays.copyOfRange(v2Parser.getRawData(), 0, 66));
+        (BitmapV2InfoHeader)
+            DIBHeader.createDIBHeader(Arrays.copyOfRange(v2Parser.getRawData(), 0, 66));
 
     // Parser and header for bitmap with BITMAPV3INFOHEADER
     URL v3Resource = BitmapParserTest.class.getClassLoader().getResource("bmp_v3_1000x500.bmp");
@@ -74,8 +73,8 @@ class BitmapParserTest {
     v3Parser = new BitmapParser(Paths.get(v3Resource.toURI()));
 
     v3InfoHeader =
-            (BitmapV3InfoHeader)
-                    DIBHeader.createDIBHeader(Arrays.copyOfRange(v3Parser.getRawData(), 0, 74));
+        (BitmapV3InfoHeader)
+            DIBHeader.createDIBHeader(Arrays.copyOfRange(v3Parser.getRawData(), 0, 74));
 
     // Parser and header for bitmap with BITMAPV4HEADER
     URL v4Resource =
@@ -114,8 +113,8 @@ class BitmapParserTest {
   @Test
   void GivenDataWithWrongHeaderSize_ThrowsIllegalArgException() {
     byte[] bytes = {
-            0x42, 0x4D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+      0x42, 0x4D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     };
     Assertions.assertThrows(IllegalArgumentException.class, () -> new BitmapParser(bytes));
   }
@@ -252,8 +251,10 @@ class BitmapParserTest {
   }
 
   @Test
-  void GivenCommonBitmapImageWithSize0InHeader_CalculatesSizeFromDimensionsAndBpp() throws URISyntaxException, IOException {
-    URL resource = BitmapParserTest.class.getClassLoader().getResource("common_bmp_no_size_in_header.bmp");
+  void GivenCommonBitmapImageWithSize0InHeader_CalculatesSizeFromDimensionsAndBpp()
+      throws URISyntaxException, IOException {
+    URL resource =
+        BitmapParserTest.class.getClassLoader().getResource("common_bmp_no_size_in_header.bmp");
     Assertions.assertNotNull(resource);
     BitmapParser parser = new BitmapParser(Paths.get(resource.toURI()));
 
