@@ -15,7 +15,7 @@ package com.eyespot.imageparser.bitmap;
  * @see InfoHeaderType
  * @author Kevin Babu
  */
-class BitmapCoreHeader extends DIBHeader {
+public class BitmapCoreHeader extends DIBHeader {
   /**
    * Constructs a {@code BitmapCoreHeader} by parsing the given BMP file data.
    *

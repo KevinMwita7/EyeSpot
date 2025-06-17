@@ -10,7 +10,7 @@ package com.eyespot.imageparser.bitmap;
  * <p>This enum can be used for identifying and dispatching parsing logic for a specific header type
  * based on the header size.
  *
- * @author [Your Name]
+ * @author Kevin Babu
  * @see BitmapConstants
  */
 public enum InfoHeaderType {

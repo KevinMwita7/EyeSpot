@@ -15,8 +15,10 @@ import java.util.Arrays;
  */
 public class ImageUtils {
 
+  private ImageUtils() {}
+
   /**
-   * Detects the type of an image from its file path. This method reads all bytes from the specified
+   * Detects the type of image from its file path. This method reads all bytes from the specified
    * file and then delegates to the {@link #detectType(byte[])} method for type detection.
    *
    * @param path The {@link Path} to the image file.
@@ -29,7 +31,7 @@ public class ImageUtils {
   }
 
   /**
-   * Detects the type of an image from a given byte array. This method inspects the initial bytes
+   * Detects the type of image from a given byte array. This method inspects the initial bytes
    * (magic numbers) of the image data to determine its format.
    *
    * <p>Currently, this method primarily checks for the following image types:

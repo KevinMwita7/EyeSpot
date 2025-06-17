@@ -1,13 +1,14 @@
 package com.eyespot.parser;
 
 import com.eyespot.imageparser.ImageType;
-import com.eyespot.imageparser.bitmap.*;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
+
+import com.eyespot.imageparser.bitmap.*;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -26,31 +27,55 @@ class BitmapParserTest {
 
   private static BitmapV4Header v4Header;
 
+  private static BitmapInfoHeader infoHeader;
+
+  private static BitmapCoreHeader coreHeader;
+
+  private static BitmapV3InfoHeader v3InfoHeader;
+
+  private static BitmapV2InfoHeader v2InfoHeader;
+
   private static BitmapParser v5Parser;
 
   private static BitmapV5Header v5Header;
 
   @BeforeAll
   static void setUp() throws URISyntaxException, IOException {
-    // BITAPINFOHEADER
+    // Parser and header for BITAPINFOHEADER
     URL commonResource = BitmapParserTest.class.getClassLoader().getResource("sample_bmp.bmp");
     Assertions.assertNotNull(commonResource);
     commonParser = new BitmapParser(Paths.get(commonResource.toURI()));
 
-    // Parser for bitmap with BITMAPCOREHEADER
+    infoHeader =
+            (BitmapInfoHeader)
+                    DIBHeader.createDIBHeader(Arrays.copyOfRange(commonParser.getRawData(), 0, 54));
+
+    // Parser and header for bitmap with BITMAPCOREHEADER
     URL coreResource = BitmapParserTest.class.getClassLoader().getResource("bmp_1000x500.bmp");
     Assertions.assertNotNull(coreResource);
     coreParser = new BitmapParser(Paths.get(coreResource.toURI()));
 
-    // Parser for bitmap with BITMAPV2INFOHEADER
+    coreHeader =
+            (BitmapCoreHeader)
+                    DIBHeader.createDIBHeader(Arrays.copyOfRange(coreParser.getRawData(), 0, 26));
+
+    // Parser and header for bitmap with BITMAPV2INFOHEADER
     URL v2Resource = BitmapParserTest.class.getClassLoader().getResource("bmp_v2_500x250.bmp");
     Assertions.assertNotNull(v2Resource);
     v2Parser = new BitmapParser(Paths.get(v2Resource.toURI()));
 
-    // Parser for bitmap with BITMAPV3INFOHEADER
+    v2InfoHeader =
+            (BitmapV2InfoHeader)
+                    DIBHeader.createDIBHeader(Arrays.copyOfRange(v2Parser.getRawData(), 0, 66));
+
+    // Parser and header for bitmap with BITMAPV3INFOHEADER
     URL v3Resource = BitmapParserTest.class.getClassLoader().getResource("bmp_v3_1000x500.bmp");
     Assertions.assertNotNull(v3Resource);
     v3Parser = new BitmapParser(Paths.get(v3Resource.toURI()));
+
+    v3InfoHeader =
+            (BitmapV3InfoHeader)
+                    DIBHeader.createDIBHeader(Arrays.copyOfRange(v3Parser.getRawData(), 0, 74));
 
     // Parser and header for bitmap with BITMAPV4HEADER
     URL v4Resource =
@@ -82,6 +107,15 @@ class BitmapParserTest {
     byte[] bytes = {
       0x56, 0x58, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    Assertions.assertThrows(IllegalArgumentException.class, () -> new BitmapParser(bytes));
+  }
+
+  @Test
+  void GivenDataWithWrongHeaderSize_ThrowsIllegalArgException() {
+    byte[] bytes = {
+            0x42, 0x4D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     };
     Assertions.assertThrows(IllegalArgumentException.class, () -> new BitmapParser(bytes));
   }
@@ -212,6 +246,20 @@ class BitmapParserTest {
         UnsupportedOperationException.class, () -> commonParser.getProfileSize());
   }
 
+  @Test
+  void GivenCommonBitmapImage_GetColourPlanes_ReturnsCorrectValue() {
+    Assertions.assertEquals(1, infoHeader.getColourPlanes());
+  }
+
+  @Test
+  void GivenCommonBitmapImageWithSize0InHeader_CalculatesSizeFromDimensionsAndBpp() throws URISyntaxException, IOException {
+    URL resource = BitmapParserTest.class.getClassLoader().getResource("common_bmp_no_size_in_header.bmp");
+    Assertions.assertNotNull(resource);
+    BitmapParser parser = new BitmapParser(Paths.get(resource.toURI()));
+
+    Assertions.assertEquals(49_152, parser.getImageDataSize());
+  }
+
   // Bitmap with BITMAPCOREHEADER tests
   @Test
   void GivenCoreBitmapImage_GetType_ReturnsBitmap() {
@@ -236,26 +284,17 @@ class BitmapParserTest {
 
   @Test
   void GivenV2Bitmap_GetRedMask_ReturnsCorrectValue() {
-    BitmapV2InfoHeader header =
-        (BitmapV2InfoHeader)
-            DIBHeader.createDIBHeader(Arrays.copyOfRange(v2Parser.getRawData(), 0, 66));
-    Assertions.assertEquals(16_711_680, header.getRedMask());
+    Assertions.assertEquals(16_711_680, v2InfoHeader.getRedMask());
   }
 
   @Test
   void GivenV2Bitmap_GetGreenMask_ReturnsCorrectValue() {
-    BitmapV2InfoHeader header =
-        (BitmapV2InfoHeader)
-            DIBHeader.createDIBHeader(Arrays.copyOfRange(v2Parser.getRawData(), 0, 66));
-    Assertions.assertEquals(65_280, header.getGreenMask());
+    Assertions.assertEquals(65_280, v2InfoHeader.getGreenMask());
   }
 
   @Test
   void GivenV2Bitmap_GetBlueMask_ReturnsCorrectValue() {
-    BitmapV2InfoHeader header =
-        (BitmapV2InfoHeader)
-            DIBHeader.createDIBHeader(Arrays.copyOfRange(v2Parser.getRawData(), 0, 66));
-    Assertions.assertEquals(255, header.getBlueMask());
+    Assertions.assertEquals(255, v2InfoHeader.getBlueMask());
   }
 
   @Test
@@ -266,6 +305,16 @@ class BitmapParserTest {
   @Test
   void GivenV2BitmapImage_GetProfileSize_ThrowsUnsupportedOperationException() {
     Assertions.assertThrows(UnsupportedOperationException.class, () -> v2Parser.getProfileSize());
+  }
+
+  @Test
+  void GivenCoreBitmapImage_GetColourPlanes_ReturnsCorrectValue() {
+    Assertions.assertEquals(1, coreHeader.getColourPlanes());
+  }
+
+  @Test
+  void GivenV2BitmapImage_GetColourPlanes_ReturnsCorrectValue() {
+    Assertions.assertEquals(1, v2InfoHeader.getColourPlanes());
   }
 
   // Bitmap with BITMAPV3INFOHEADER tests
@@ -281,26 +330,17 @@ class BitmapParserTest {
 
   @Test
   void GivenV3Bitmap_GetRedMask_ReturnsCorrectValue() {
-    BitmapV3InfoHeader header =
-        (BitmapV3InfoHeader)
-            DIBHeader.createDIBHeader(Arrays.copyOfRange(v3Parser.getRawData(), 0, 74));
-    Assertions.assertEquals(16_711_680, header.getRedMask());
+    Assertions.assertEquals(16_711_680, v3InfoHeader.getRedMask());
   }
 
   @Test
   void GivenV3Bitmap_GetGreenMask_ReturnsCorrectValue() {
-    BitmapV3InfoHeader header =
-        (BitmapV3InfoHeader)
-            DIBHeader.createDIBHeader(Arrays.copyOfRange(v3Parser.getRawData(), 0, 74));
-    Assertions.assertEquals(65_280, header.getGreenMask());
+    Assertions.assertEquals(65_280, v3InfoHeader.getGreenMask());
   }
 
   @Test
   void GivenV3Bitmap_GetBlueMask_ReturnsCorrectValue() {
-    BitmapV3InfoHeader header =
-        (BitmapV3InfoHeader)
-            DIBHeader.createDIBHeader(Arrays.copyOfRange(v3Parser.getRawData(), 0, 74));
-    Assertions.assertEquals(255, header.getBlueMask());
+    Assertions.assertEquals(255, v3InfoHeader.getBlueMask());
   }
 
   @Test
@@ -311,6 +351,11 @@ class BitmapParserTest {
   @Test
   void GivenV3BitmapImage_GetProfileSize_ThrowsUnsupportedOperationException() {
     Assertions.assertThrows(UnsupportedOperationException.class, () -> v3Parser.getProfileSize());
+  }
+
+  @Test
+  void GivenV3BitmapImage_GetColourPlanes_ReturnsCorrectValue() {
+    Assertions.assertEquals(1, v3InfoHeader.getColourPlanes());
   }
 
   // Bitmap with BITMAPV4HEADER tests
@@ -420,6 +465,11 @@ class BitmapParserTest {
     Assertions.assertThrows(UnsupportedOperationException.class, () -> v4Parser.getProfileSize());
   }
 
+  @Test
+  void GivenV4BitmapImage_GetColourPlanes_ReturnsCorrectValue() {
+    Assertions.assertEquals(1, v4Header.getColourPlanes());
+  }
+
   // Bitmap with BITMAPV5HEADER tests
   @Test
   void GivenV5Bitmap_GetType_ReturnsCorrectValue() {
@@ -454,6 +504,11 @@ class BitmapParserTest {
   @Test
   void GivenV5BitmapParser_GetAlphaMask_ReturnsCorrectValue() {
     Assertions.assertEquals(4_278_190_080L, v5Parser.getAlphaMask());
+  }
+
+  @Test
+  void GivenV5BitmapImage_GetColourPlanes_ReturnsCorrectValue() {
+    Assertions.assertEquals(1, v5Header.getColourPlanes());
   }
 
   @Test
