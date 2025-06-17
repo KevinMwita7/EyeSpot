@@ -5,7 +5,7 @@
 
 # Eyespot
 
-_Eyespot_ is a Java-based image parsing project, named after the [eyespots](https://en.wikipedia.org/wiki/Eyespot_(mimicry))—the circular, eye-like markings found on butterflies and other animals.
+_Eyespot_ is a Java-based image parsing project, named after [eyespots](https://en.wikipedia.org/wiki/Eyespot_(mimicry))—the circular, eye-like markings found on butterflies and other animals.
 
 ## Overview
 
@@ -17,7 +17,8 @@ This project is intentionally low-level and experimental. We'll see how and wher
 
 ## 🧩 Class Hierarchy & Methods
 
-This section outlines the structure of BMP DIB headers implemented as an inheritance tree. All header classes take a `byte[]` and an offset and delegate to their superclass constructors.
+This section outlines the structure of BMP DIB headers implemented as an inheritance tree. 
+**Note:** All header classes take a `byte[]` and an offset (where the header starts) and delegate to their superclass constructors.
 
 ### `abstract class DIBHeader`
 
