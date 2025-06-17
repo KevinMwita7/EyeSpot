@@ -12,7 +12,6 @@ import java.util.Arrays;
  * Utility class for image-related operations
  *
  * @author Kevin Babu
- * @version 1.0
  */
 public class ImageUtils {
 

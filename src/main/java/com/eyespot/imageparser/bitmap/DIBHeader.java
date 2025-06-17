@@ -3,6 +3,17 @@ package com.eyespot.imageparser.bitmap;
 import static com.eyespot.imageparser.util.ImageUtils.readInt;
 import static com.eyespot.imageparser.util.ImageUtils.readShort;
 
+/**
+ * Abstract base class representing a DIB (Device Independent Bitmap) header.
+ *
+ * <p>This class provides common fields and parsing logic for all DIB header variants used in BMP
+ * files. It handles both legacy and extended header types and is capable of interpreting key bitmap
+ * metadata such as dimensions, color depth, compression method, and resolution.
+ *
+ * <p>Subclasses should provide the specific header format implementations.
+ *
+ * @author Kevin Babu
+ */
 public abstract class DIBHeader {
   protected final int headerSize;
   protected final int width;
@@ -16,7 +27,13 @@ public abstract class DIBHeader {
   protected final int nColours;
   protected final int importantColours;
 
-  // Common constructor to parse fields common to many DIB headers
+  /**
+   * Parses the common fields from a byte array representing a BMP file's DIB header.
+   *
+   * @param data the byte array containing the BMP file data
+   * @param headerOffset the offset at which the DIB header begins
+   * @throws IllegalArgumentException if the data is too short for the declared DIB header
+   */
   protected DIBHeader(byte[] data, int headerOffset) {
     this.headerSize = readInt(data, headerOffset);
     if (data.length < BitmapConstants.FILE_HEADER_SIZE + headerSize) {
@@ -24,7 +41,7 @@ public abstract class DIBHeader {
           "Byte array too short for declared DIB header size: " + headerSize);
     }
 
-    // Is BITMAPCOREHEADER
+    // Parse BITMAPCOREHEADER format
     if (this.headerSize == BitmapConstants.BITMAPCOREHEADER_SIZE) {
       this.width = readShort(data, headerOffset + BitmapConstants.BI_CORE_WIDTH_OFFSET);
       this.height = readShort(data, headerOffset + BitmapConstants.BI_CORE_HEIGHT_OFFSET);
@@ -39,7 +56,7 @@ public abstract class DIBHeader {
       return;
     }
 
-    // Is BITMAPINFOHEADER and later
+    // Parse BITMAPINFOHEADER and newer formats
     this.width = readInt(data, headerOffset + BitmapConstants.BI_WIDTH_OFFSET);
     this.height = readInt(data, headerOffset + BitmapConstants.BI_HEIGHT_OFFSET);
     this.colourPlanes = readShort(data, headerOffset + BitmapConstants.BI_PLANES_OFFSET);
@@ -59,15 +76,18 @@ public abstract class DIBHeader {
     this.importantColours = readInt(data, headerOffset + BitmapConstants.BI_CLR_IMPORTANT_OFFSET);
   }
 
-  /** Factory method to create the correct DIBHeader subclass based on header size. */
+  /**
+   * Factory method to create an appropriate {@code DIBHeader} subclass based on the header size
+   * field.
+   *
+   * @param data the byte array containing the BMP file
+   * @return the correct {@code DIBHeader} instance
+   * @throws IllegalArgumentException if the header size is unknown or unsupported
+   */
   public static DIBHeader createDIBHeader(byte[] data) {
-    // DIB header starts after file header
     int dibHeaderFileOffset = BitmapConstants.FILE_HEADER_SIZE;
-
-    // Read the biSize field from the DIB header
     int headerSize = readInt(data, dibHeaderFileOffset);
 
-    // Determine which DIBHeader type to instantiate
     switch (headerSize) {
       case BitmapConstants.BITMAPCOREHEADER_SIZE: // 12 bytes
         return new BitmapCoreHeader(data, dibHeaderFileOffset);
@@ -86,59 +106,89 @@ public abstract class DIBHeader {
     }
   }
 
-  // Abstract method to get the specific InfoHeaderType
+  /**
+   * Returns the specific DIB header type represented by this instance.
+   *
+   * @return the header type enum value
+   */
   public abstract InfoHeaderType getType();
 
   // Getters for common fields
+  /** @return the size of the DIB header in bytes */
   public int getHeaderSize() {
     return headerSize;
   }
 
+  /** @return the bitmap width in pixels */
   public int getWidth() {
     return width;
   }
 
+  /** @return the bitmap height in pixels */
   public int getHeight() {
     return height;
   }
 
+  /** @return number of color planes (always 1 in modern BMPs) */
   public short getColourPlanes() {
     return colourPlanes;
   }
 
+  /** @return the number of bits per pixel */
   public short getBitsPerPixel() {
     return bitsPerPixel;
   }
 
+  /** @return the compression method used */
   public int getCompression() {
     return compression;
   }
 
+  /** @return the size of the actual bitmap data in bytes */
   public int getImageDataSize() {
     return imageSize;
   }
 
+  /** @return the horizontal resolution in pixels per meter */
   public int getXResolution() {
     return xResolution;
   }
 
+  /** @return the vertical resolution in pixels per meter */
   public int getYResolution() {
     return yResolution;
   }
 
+  /** @return the number of colors used in the bitmap */
   public int getNColours() {
     return nColours;
   }
 
+  /** @return the number of important colors (generally ignored) */
   public int getImportantColours() {
     return importantColours;
   }
 
+  /**
+   * Calculates the size of one scanline (row of pixels), aligned to a 4-byte boundary.
+   *
+   * @param width the width of the image in pixels
+   * @param bitsPerPixel the number of bits per pixel
+   * @return the scanline size in bytes
+   */
   protected static int calculateScanlineSize(int width, int bitsPerPixel) {
     int bytesPerRow = (width * bitsPerPixel + 7) / 8;
     return (int) Math.ceil(bytesPerRow / 4.0) * 4;
   }
 
+  /**
+   * Calculates the total bitmap data size based on dimensions and color depth.
+   *
+   * @param width the image width
+   * @param height the image height
+   * @param bitsPerPixel the color depth
+   * @return the size of the bitmap data in bytes
+   */
   protected static int calculateBitmapDataSize(int width, int height, int bitsPerPixel) {
     return calculateScanlineSize(width, bitsPerPixel) * Math.abs(height);
   }

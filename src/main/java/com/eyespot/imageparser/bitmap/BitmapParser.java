@@ -24,8 +24,13 @@ import java.util.Objects;
  * determine the image type. It also exposes methods to retrieve image metadata such as type, size,
  * and offset
  *
+ * <p>This implementation is read-only and does not modify the image data.
+ *
  * @author Kevin Babu
- * @version 1.0
+ * @see DIBHeader
+ * @see BitmapConstants
+ * @see InfoHeaderType
+ * @see ImageType
  */
 public class BitmapParser implements IParser {
 
@@ -41,7 +46,10 @@ public class BitmapParser implements IParser {
   /** The bitmap colour palette, if present. */
   private final ColourPalette colourPalette;
 
-  /** Represents the BITMAPFILEHEADER structure (14 bytes). */
+  /**
+   * Represents the {@code BITMAPFILEHEADER} structure (14 bytes). Contains basic metadata such as
+   * file type, size, and offset to pixel data.
+   */
   private static class Header {
     final ImageType type;
     final int size;
@@ -49,6 +57,12 @@ public class BitmapParser implements IParser {
     final short reserved1;
     final short reserved2;
 
+    /**
+     * Constructs a Header from the byte array.
+     *
+     * @param data the byte array containing the file header
+     * @throws IllegalArgumentException if data is too short to contain a valid header
+     */
     private Header(byte[] data) {
       if (data.length < BitmapConstants.FILE_HEADER_SIZE) {
         throw new IllegalArgumentException("Byte array too short for bitmap file header.");
@@ -61,28 +75,42 @@ public class BitmapParser implements IParser {
       this.offset = readInt(data, BitmapConstants.BF_OFFBITS_OFFSET);
     }
 
+    /** @return The image type, typically {@code BITMAP} */
     public ImageType getType() {
       return type;
     }
 
+    /** @return The total size of the BMP file in bytes */
     public int getSize() {
       return size;
     }
 
+    /** @return The byte offset from start of file to pixel data */
     public int getOffset() {
       return offset;
     }
   }
 
   /**
-   * Represents the colour palette if present in the BMP file. See <a
-   * href="https://en.wikipedia.org/wiki/BMP_file_format#Color_table">Colour table</a>
+   * Represents the colour palette (if present) in the BMP file.
+   *
+   * <p>Only present when bit depth is ≤ 8. Supports RGBTRIPLE (3-byte) and RGBQUAD (4-byte)
+   * entries.
+   *
+   * @see <a href="https://en.wikipedia.org/wiki/BMP_file_format#Color_table">BMP Colour Table</a>
    */
   private static class ColourPalette {
     // Array to store parsed ARGB colours (AARRGGBB)
     private final int[] colours;
     private final boolean hasAlphaChannel;
 
+    /**
+     * Parses the colour palette from the BMP byte array.
+     *
+     * @param data the image byte array
+     * @param dibHeader the parsed DIB header
+     * @param paletteStartFileOffset file offset where the palette begins
+     */
     private ColourPalette(byte[] data, DIBHeader dibHeader, int paletteStartFileOffset) {
       if (dibHeader.getBitsPerPixel() > 8) {
         throw new IllegalArgumentException("Colour palette is not expected for bit depth > 8.");
@@ -153,10 +181,18 @@ public class BitmapParser implements IParser {
       this.hasAlphaChannel = explicitAlphaFlag || foundNonZeroReservedByte;
     }
 
+    /** @return the number of colour entries in the palette */
     public int getNumberOfEntries() {
       return colours.length;
     }
 
+    /**
+     * Retrieves a colour entry from the palette.
+     *
+     * @param index the palette index
+     * @return the ARGB colour as {@code 0xAARRGGBB}
+     * @throws IndexOutOfBoundsException if index is out of bounds
+     */
     public int getColour(int index) {
       if (index < 0 || index >= colours.length) {
         throw new IndexOutOfBoundsException(
@@ -166,10 +202,9 @@ public class BitmapParser implements IParser {
     }
 
     /**
-     * Returns true if the palette is believed to contain active alpha values (i.e. not all entries
-     * are fully opaque or strictly follow the "reserved=0" rule).
+     * Indicates if any alpha channel data is present in the palette.
      *
-     * @return true if alpha is likely present, else, return false.
+     * @return true if alpha channel is likely present
      */
     public boolean hasAlphaChannel() {
       return hasAlphaChannel;
@@ -179,9 +214,9 @@ public class BitmapParser implements IParser {
   /**
    * Constructs a new {@code BitmapParser} by reading all bytes from the given file path.
    *
-   * @param path the file path to the image
+   * @param path the path to a BMP image file
    * @throws IOException if an I/O error occurs reading from the file
-   * @throws IllegalArgumentException if the file does not represent a valid BMP image
+   * @throws IllegalArgumentException if the file does not appear to be a valid BMP
    */
   public BitmapParser(Path path) throws IOException {
     this(Files.readAllBytes(path));
@@ -229,72 +264,87 @@ public class BitmapParser implements IParser {
     }
   }
 
+  /** @return the {@link ImageType} for this parser (always {@code BITMAP}) */
   @Override
   public ImageType getType() {
     return header.getType();
   }
 
+  /** @return total file size in bytes */
   @Override
   public int getSize() {
     return header.getSize();
   }
 
+  /** @return the byte offset to the pixel data */
   @Override
   public int getOffset() {
     return header.getOffset();
   }
 
-  /**
-   * Returns a defensive copy of the raw image data byte array.
-   *
-   * @return A copy of the image data.
-   */
+  /** @return a defensive copy of the raw image data */
   public byte[] getRawData() {
     return Arrays.copyOf(data, data.length);
   }
 
   // Getters
+  /** @return the parsed DIB header type */
   public InfoHeaderType getDibHeaderType() {
     return dibHeader.getType();
   }
 
+  /** @return image width in pixels */
   public int getWidth() {
     return dibHeader.getWidth();
   }
 
+  /** @return image height in pixels */
   public int getHeight() {
     return dibHeader.getHeight();
   }
 
+  /** @return number of bits per pixel */
   public short getBitsPerPixel() {
     return dibHeader.getBitsPerPixel();
   }
 
+  /** @return compression method (e.g., BI_RGB, BI_RLE8) */
   public int getCompression() {
     return dibHeader.getCompression();
   }
 
+  /** @return size of bitmap pixel data in bytes */
   public int getImageDataSize() {
     return dibHeader.getImageDataSize();
   }
 
+  /** @return number of colours used in the palette */
   public int getNColours() {
     return dibHeader.getNColours();
   }
 
+  /** @return number of important colours specified in the header */
   public int getImportantColours() {
     return dibHeader.getImportantColours();
   }
 
+  /** @return horizontal resolution in pixels per meter */
   public int getXResolution() {
     return dibHeader.getXResolution();
   }
 
+  /** @return vertical resolution in pixels per meter */
   public int getYResolution() {
     return dibHeader.getYResolution();
   }
 
-  // You can add more specific getters for V4/V5 header fields with proper casting and checks
+  /**
+   * Returns the alpha mask for V3/V4/V5 headers.
+   *
+   * @return the alpha bitmask
+   * @throws UnsupportedOperationException if alpha mask is not defined for this header type
+   */
+  // TODO: add more specific getters for V4/V5 header fields with proper casting and checks
   public long getAlphaMask() {
     if (InfoHeaderType.BITMAPV3INFOHEADER.equals(dibHeader.getType())) {
       return ((BitmapV3InfoHeader) dibHeader).getAlphaMask();
@@ -310,6 +360,10 @@ public class BitmapParser implements IParser {
         String.format("No alpha mask for image with %s header", dibHeader.getType()));
   }
 
+  /**
+   * @return ICC profile size for BITMAPV5HEADER
+   * @throws UnsupportedOperationException if not a V5 header
+   */
   public int getProfileSize() {
     if (dibHeader instanceof BitmapV5Header) {
       return ((BitmapV5Header) dibHeader).getProfileSize();
@@ -318,24 +372,17 @@ public class BitmapParser implements IParser {
         String.format("No profile size for image with %s header", dibHeader.getType()));
   }
 
+  /** @return size of the DIB header in bytes */
   public int getHeaderSize() {
     return dibHeader.getHeaderSize();
   }
 
-  /**
-   * Determines if a colour palette is present in the BMP file based on bit depth.
-   *
-   * @return true if a colour palette is expected, false otherwise.
-   */
+  /** @return true if a colour palette is present (typically for ≤ 8 bpp images) */
   public boolean hasColourPalette() {
     return dibHeader.getBitsPerPixel() <= 8; // Typically for 1, 4, or 8 bpp
   }
 
-  /**
-   * Determines if a colour palette has an alpha channel.
-   *
-   * @return true if alpha channel is present in the colour palette and false otherwise
-   */
+  /** @return true if alpha channel is present in the colour palette and false otherwise */
   public boolean hasAlphaChannel() {
     return Objects.requireNonNull(colourPalette).hasAlphaChannel();
   }
