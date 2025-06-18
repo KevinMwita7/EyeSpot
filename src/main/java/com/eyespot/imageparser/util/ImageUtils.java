@@ -13,7 +13,7 @@ import java.util.Arrays;
  *
  * @author Kevin Babu
  */
-public class ImageUtils {
+public final class ImageUtils {
 
   private ImageUtils() {}
 

@@ -50,7 +50,7 @@ public class BitmapParser implements IParser {
    * Represents the {@code BITMAPFILEHEADER} structure (14 bytes). Contains basic metadata such as
    * file type, size, and offset to pixel data.
    */
-  private static class Header {
+  private static final class Header {
     final ImageType type;
     final int size;
     final int offset; // Offset to actual image data
@@ -99,7 +99,7 @@ public class BitmapParser implements IParser {
    *
    * @see <a href="https://en.wikipedia.org/wiki/BMP_file_format#Color_table">BMP Colour Table</a>
    */
-  private static class ColourPalette {
+  private static final class ColourPalette {
     // Array to store parsed ARGB colours (AARRGGBB)
     private final int[] colours;
     private final boolean hasAlphaChannel;
