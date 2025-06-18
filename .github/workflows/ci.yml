@@ -4,8 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    types:
-      - opened
 
 jobs:
   build:
@@ -64,6 +62,7 @@ jobs:
           deny-licenses: GPL-1.0-or-later, LGPL-2.0-or-later
           retry-on-snapshot-warnings: true
           base-ref: "^refs/heads/main$"
+          head-ref: "^((?!refs\/heads\/main).)*$"
 
   pmd-code-scan:
     permissions:
