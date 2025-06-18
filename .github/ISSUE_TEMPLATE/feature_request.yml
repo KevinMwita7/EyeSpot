@@ -1,0 +1,39 @@
+name: Feature Request
+description: Suggest a new idea or enhancement.
+title: "[FEATURE] <short description>"
+labels: ["enhancement"]
+assignees: ["KevinMwita7"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Thanks for your idea!
+
+  - type: input
+    id: summary
+    attributes:
+      label: Feature Summary
+      description: A concise summary of your idea.
+      placeholder: e.g., Add support for JPEG
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the problem this solves or the value it adds.
+      placeholder: |
+        I often process JPEGs
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What other solutions or workarounds have you considered?
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context / Mockups
+      description: Add screenshots, sketches, links, or other context.
