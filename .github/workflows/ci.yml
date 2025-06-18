@@ -61,8 +61,8 @@ jobs:
           comment-summary-in-pr: always
           deny-licenses: GPL-1.0-or-later, LGPL-2.0-or-later
           retry-on-snapshot-warnings: true
-          base-ref: "^refs/heads/main$"
-          head-ref: "^((?!refs\\/heads\\/main).)*$"
+          base-ref: ${{ github.base_ref }}
+          head-ref: ${{ github.head_ref }}
 
   pmd-code-scan:
     permissions:
