@@ -80,11 +80,15 @@ jobs:
           cache: maven
       - name: Run PMD
         id: pmd
-        uses: pmd/pmd-github-action@v1
+        uses: pmd/pmd-github-action@v2
         with:
-          rulesets: 'rulesets/java/quickstart.xml'
+          version: '6.55.0'
+          rulesets: 'rulesets/java/quickstart.xml,ruleset.xml'
           sourcePath: 'src/main/java'
           analyzeModifiedFilesOnly: false
+      - name: Fail build if there are violations
+        if: steps.pmd.outputs.violations != 0
+        run: exit 1
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3
         with:
