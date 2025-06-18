@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & Support
+    url: https://github.com/KevinMwita7/EyeSpot/discussions
+    about: Please use GitHub Discussions for questions and general support.
