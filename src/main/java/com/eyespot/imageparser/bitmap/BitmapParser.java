@@ -64,10 +64,6 @@ public class BitmapParser implements IParser {
      * @throws IllegalArgumentException if data is too short to contain a valid header
      */
     private Header(byte[] data) {
-      if (data.length < BitmapConstants.FILE_HEADER_SIZE) {
-        throw new IllegalArgumentException("Byte array too short for bitmap file header.");
-      }
-
       this.type = ImageType.BITMAP;
       this.size = readInt(data, BitmapConstants.BF_SIZE_OFFSET);
       this.reserved1 = readShort(data, BitmapConstants.BF_RESERVED1_OFFSET);
@@ -97,10 +93,9 @@ public class BitmapParser implements IParser {
    * <p>Only present when bit depth is ≤ 8. Supports RGBTRIPLE (3-byte) and RGBQUAD (4-byte)
    * entries.
    *
-   * @see <a href="https://en.wikipedia.org/wiki/BMP_file_format#Color_table">BMP Colour Table</a>
+   * @see <a href="https://en.wikipedia.org/wiki/BMP_file_format#Colour_table">BMP Colour Table</a>
    */
   private static final class ColourPalette {
-    // Array to store parsed ARGB colours (AARRGGBB)
     private final int[] colours;
     private final boolean hasAlphaChannel;
 
@@ -116,13 +111,14 @@ public class BitmapParser implements IParser {
         throw new IllegalArgumentException("Colour palette is not expected for bit depth > 8.");
       }
 
-      int numEntries = 0;
-      // If the number of colors in the color palette is 0, default to 2^n
-      // n == bits per pixel
+      int numEntries;
+      // If the number of colours in the colour palette is 0, default to 2^n where n == bits per
+      // pixel
       if (dibHeader.getNColours() == 0) {
         numEntries = 1 << dibHeader.getBitsPerPixel(); // Max colours for bit depth
+      } else {
+        numEntries = dibHeader.getNColours();
       }
-
       this.colours = new int[numEntries];
       int bytesPerPaletteEntry;
 
@@ -140,10 +136,7 @@ public class BitmapParser implements IParser {
 
       // Check for explicit alpha mask in BITMAPV4/V5 headers
       if (dibHeader instanceof BitmapV4Header) {
-        BitmapV4Header v4Header = (BitmapV4Header) dibHeader;
-        if (v4Header.getAlphaMask() != 0) {
-          explicitAlphaFlag = true;
-        }
+        explicitAlphaFlag = ((BitmapV4Header) dibHeader).getAlphaMask() != 0;
       }
 
       for (int i = 0; i < numEntries; i++) {
@@ -166,12 +159,10 @@ public class BitmapParser implements IParser {
         // Default to opaque (255)
         int alpha = 0xFF;
 
-        // Check alpha in bytes, ig not explicitly stated in header
+        // Check alpha in bytes, if not explicitly stated in header
         if (bytesPerPaletteEntry == 4) {
           alpha = data[entryOffset + 3] & 0xFF;
-          if (alpha != 0xFF) {
-            foundNonZeroReservedByte = true;
-          }
+          foundNonZeroReservedByte = alpha != 0xFF;
         }
 
         // Store as ARGB (AARRGGBB)
@@ -264,6 +255,508 @@ public class BitmapParser implements IParser {
     }
   }
 
+  /** Helper method to read uncompressed (BI_RGB) pixel data into the pixels array. */
+  private int[][] readUncompressedPixels(int displayRowMapMultiplier, int displayRowMapOffset) {
+
+    int width = dibHeader.getWidth();
+    int height = Math.abs(dibHeader.getHeight());
+    int[][] pixels = new int[height][width];
+    int bitsPerPixel = dibHeader.getBitsPerPixel();
+    int scanlineByteSize = DIBHeader.calculateScanlineSize(width, bitsPerPixel);
+    int fileRowIndexStart = 0;
+    int fileRowIncrement = 1;
+
+    for (int i = fileRowIndexStart; i != height; i += fileRowIncrement) {
+      // Calculate the corresponding row in the output array
+      int displayRowIndex = displayRowMapOffset + (i * displayRowMapMultiplier);
+
+      for (int x = 0; x < width; x++) {
+        int pixelValueARGB;
+
+        switch (bitsPerPixel) {
+          case 1:
+          case 4:
+          case 8:
+            pixelValueARGB =
+                colourPalette.getColour(getIndexedColourModePixelValue(i, x, scanlineByteSize));
+            break;
+          case 16:
+          case 24:
+          case 32:
+            pixelValueARGB = getNonIndexedColourModePixelValue(i, x, scanlineByteSize);
+            break;
+          default:
+            throw new UnsupportedOperationException(
+                "Unsupported bits per pixel for BI_RGB: " + bitsPerPixel);
+        }
+        pixels[displayRowIndex][x] = pixelValueARGB;
+      }
+    }
+
+    return pixels;
+  }
+
+  /**
+   * Extracts the pixel index from a byte array representing image data, based on the specified bit
+   * depth and pixel position.
+   *
+   * <p>This method handles three common bits-per-pixel configurations:
+   *
+   * <ul>
+   *   <li><b>8 bits per pixel</b>: each byte directly represents one pixel index.
+   *   <li><b>4 bits per pixel</b>: each byte contains two pixel indices (nibbles), with even
+   *       positions using the high nibble and odd positions using the low nibble.
+   *   <li><b>1 bit per pixel</b>: each byte contains 8 pixels, represented from the most
+   *       significant bit (leftmost pixel) to the least significant bit (rightmost pixel).
+   * </ul>
+   *
+   * @param currentPixelFileOffset the offset into the data array where the relevant byte is located
+   * @param bitsPerPixel the number of bits used to represent each pixel (typically 1, 4, or 8)
+   * @param pos the position of the pixel relative to the byte, used for determining which bits to
+   *     extract
+   * @return the extracted pixel index
+   */
+  private int getPixelIndex(int currentPixelFileOffset, int bitsPerPixel, int pos) {
+    int byteContainingPixels = data[currentPixelFileOffset] & 0xFF;
+
+    if (bitsPerPixel == 8) {
+      return byteContainingPixels;
+    }
+    if (bitsPerPixel == 4) {
+      if (pos % 2 == 0) {
+        return (byteContainingPixels >> 4) & 0x0F;
+      } else {
+        return byteContainingPixels & 0x0F;
+      }
+    }
+
+    int bitPosition = 7 - (pos % 8);
+    return (byteContainingPixels >> bitPosition) & 0x01;
+  }
+
+  /**
+   * Retrieves the pixel value (palette index) for a specific pixel in an image using indexed colour
+   * mode.
+   *
+   * <p><b>Indexed Colour Mode:</b> In this mode, pixel values do not store actual colours but
+   * instead store indices into a colour palette (also known as a colour table). The palette
+   * contains the actual RGB colour definitions. Depending on the bit depth (e.g., 1, 4, or 8 bits
+   * per pixel), multiple pixels may be packed into a single byte.
+   *
+   * <p>This method calculates the file offset of the specified pixel within the image data,
+   * extracts the pixel index from the byte using {@code getPixelIndex()}, and then verifies that
+   * the index falls within the bounds of the defined palette.
+   *
+   * @param row the row index (scanline number) of the pixel (0-based from top or bottom depending
+   *     on image orientation)
+   * @param cell the column index (horizontal position) of the pixel (0-based)
+   * @param scanlineByteSize the total number of bytes in a single scanline (row) of the image
+   * @return the palette index corresponding to the specified pixel
+   * @throws IllegalArgumentException if the computed file offset is out of bounds or if the
+   *     extracted palette index is not valid
+   */
+  private int getIndexedColourModePixelValue(int row, int cell, int scanlineByteSize) {
+    if (colourPalette == null) {
+      throw new IllegalStateException("Colour palette missing for indexed colour mode.");
+    }
+
+    // Calculate the current row's offset in the file
+    int currentScanlineFileOffset = header.getOffset() + (row * scanlineByteSize);
+    int bitsPerPixel = dibHeader.getBitsPerPixel();
+
+    int currentPixelFileOffset = currentScanlineFileOffset + (cell * bitsPerPixel / 8);
+
+    if (currentPixelFileOffset < 0 || currentPixelFileOffset >= data.length) {
+      throw new IllegalArgumentException(
+          "Pixel data offset out of bounds for indexed pixel at (" + cell + "," + row + ")");
+    }
+
+    int pixelIndex = getPixelIndex(currentPixelFileOffset, bitsPerPixel, cell);
+    if (pixelIndex < 0 || pixelIndex >= colourPalette.getNumberOfEntries()) {
+      throw new IllegalArgumentException(
+          "Palette index " + pixelIndex + " out of bounds at pixel (" + cell + "," + row + ")");
+    }
+    return pixelIndex;
+  }
+
+  /**
+   * Retrieves the ARGB colour value of a specific pixel in a non-indexed colour image (BI_RGB
+   * format).
+   *
+   * <p><b>Non-Indexed Colour Mode (BI_RGB):</b> Unlike indexed colour mode, non-indexed images
+   * store actual colour values for each pixel directly in the image data. This method supports 16,
+   * 24, and 32 bits per pixel (bpp) formats:
+   *
+   * <ul>
+   *   <li><b>16bpp (RGB555):</b> Each pixel is stored as a 2-byte (16-bit) value. Bits are
+   *       allocated as:
+   *       <pre>
+   *       Bit layout: RRRRRGGGGGBBBBB
+   *       - Bits 15–11: Red (5 bits)
+   *       - Bits 10–5 : Green (5 bits)
+   *       - Bits 4–0  : Blue (5 bits)
+   *       </pre>
+   *       These are expanded to 8-bit components for ARGB output.
+   *   <li><b>24bpp (RGB888):</b> Each pixel uses 3 bytes (24 bits) in the order Blue, Green, Red
+   *       (BGR). Alpha is assumed to be 255 (fully opaque).
+   *   <li><b>32bpp (ARGB8888 or BGRA):</b> Each pixel uses 4 bytes. The order is Blue, Green, Red,
+   *       Alpha. The fourth byte is interpreted as the alpha (transparency) channel.
+   * </ul>
+   *
+   * @param i the row index (scanline number) of the pixel (0-based)
+   * @param x the column index (horizontal pixel position) within the scanline (0-based)
+   * @param scanlineByteSize the number of bytes that make up one scanline
+   * @return the ARGB colour value of the specified pixel as a 32-bit integer
+   * @throws IllegalArgumentException if the computed file offset is outside the bounds of the image
+   *     data
+   * @throws UnsupportedOperationException if the bits-per-pixel value is unsupported
+   */
+  private int getNonIndexedColourModePixelValue(int i, int x, int scanlineByteSize) {
+    // Calculate the current row's offset in the file
+    int currentScanlineFileOffset = header.getOffset() + (i * scanlineByteSize);
+
+    switch (dibHeader.getBitsPerPixel()) {
+      case 16:
+        {
+          int currentPixelFileOffset = currentScanlineFileOffset + (x * 2);
+
+          if (currentPixelFileOffset < 0 || currentPixelFileOffset + 2 > data.length) {
+            throw new IllegalArgumentException(
+                "Pixel data offset out of bounds for 16bpp pixel at (" + x + "," + i + ")");
+          }
+          short pixelData = readShort(data, currentPixelFileOffset);
+
+          // Convert 5-bit components to 8-bit.
+          int b = (pixelData & 0x001F) << 3;
+          int g = ((pixelData & 0x03E0) >> 5) << 3;
+          int r = ((pixelData & 0x7C00) >> 10) << 3;
+
+          return (0xFF << 24) | (r << 16) | (g << 8) | b;
+        }
+      case 24:
+        {
+          int currentPixelFileOffset = header.getOffset() + (x * 3);
+          if (currentPixelFileOffset < 0 || currentPixelFileOffset + 3 > data.length) {
+            throw new IllegalArgumentException(
+                "Pixel data offset out of bounds for 24bpp pixel at (" + x + "," + i + ")");
+          }
+          int b = data[currentPixelFileOffset] & 0xFF;
+          int g = data[currentPixelFileOffset + 1] & 0xFF;
+          int r = data[currentPixelFileOffset + 2] & 0xFF;
+          return (0xFF << 24) | (r << 16) | (g << 8) | b;
+        }
+      case 32:
+        int currentPixelFileOffset = currentScanlineFileOffset + (x * 4);
+        if (currentPixelFileOffset < 0 || currentPixelFileOffset + 4 > data.length) {
+          throw new IllegalArgumentException(
+              "Pixel data offset out of bounds for 32bpp pixel at (" + x + "," + i + ")");
+        }
+        int b = data[currentPixelFileOffset] & 0xFF;
+        int g = data[currentPixelFileOffset + 1] & 0xFF;
+        int r = data[currentPixelFileOffset + 2] & 0xFF;
+        // For BI_RGB 32bpp, the 4th byte is usually alpha (A) or unused (X).
+        // Currently, interpret it as alpha, as is common in modern usage.
+        int a = data[currentPixelFileOffset + 3] & 0xFF;
+        return (a << 24) | (r << 16) | (g << 8) | b;
+      default:
+        throw new UnsupportedOperationException(
+            "Unsupported bits per pixel for BI_RGB: " + dibHeader.getBitsPerPixel());
+    }
+  }
+
+  /**
+   * Reads pixel data from a BMP image using bitfield masks (BI_BITFIELDS or BI_ALPHABITFIELDS
+   * compression) and returns it as a 2D array of ARGB pixel values.
+   *
+   * <p><b>Bitfield Compression Mode:</b> In this mode, each pixel's colour components are not
+   * assumed to follow a fixed layout like RGB888. Instead, individual bit masks are used to define
+   * the positions of red, green, blue, and optionally alpha channels. These masks are typically
+   * defined in the {@code BitmapV2InfoHeader}, {@code BitmapV3InfoHeader}, or {@code
+   * BitmapV4Header}, and are extracted using {@link #extractMasks()}.
+   *
+   * <p>This method only supports 16bpp and 32bpp images. It dynamically chooses the appropriate
+   * pixel-reading method for each scanline (either {@code read16BppBitfieldPixels()} or {@code
+   * read32BppBitfieldPixels()}) depending on the bit depth.
+   *
+   * <p>The scanline reading direction is flexible, allowing for bottom-up or top-down row ordering
+   * via the {@code fileRowIndexStart}, {@code fileRowIndexEnd}, and {@code fileRowIncrement}
+   * parameters. The mapping to display coordinates is controlled by {@code displayRowMapMultiplier}
+   * and {@code displayRowMapOffset}, which determine how file rows map to the output image's row
+   * indices.
+   *
+   * @param displayRowMapMultiplier multiplier for converting file row index to display row index
+   * @param displayRowMapOffset offset to apply after scaling the file row index for display mapping
+   * @return a 2D int array of ARGB pixel values representing the image
+   * @throws IllegalArgumentException if the image's bits per pixel is not 16 or 32
+   */
+  private int[][] readBitfieldPixels(int displayRowMapMultiplier, int displayRowMapOffset) {
+
+    int fileRowIndexStart = 0;
+    int fileRowIncrement = 1;
+    int fileRowIndexEnd = Math.abs(dibHeader.getHeight());
+    int bitsPerPixel = dibHeader.getBitsPerPixel();
+    int width = dibHeader.getWidth();
+    int[][] pixels = new int[Math.abs(dibHeader.getHeight())][width];
+
+    if (bitsPerPixel != 16 && bitsPerPixel != 32) {
+      throw new IllegalArgumentException(
+          "BI_BITFIELDS compression is only valid for 16 or 32 bits per pixel.");
+    }
+
+    long[] masks = extractMasks();
+
+    for (int i = fileRowIndexStart; i != fileRowIndexEnd; i += fileRowIncrement) {
+
+      if (bitsPerPixel == 16) {
+        read16BppBitfieldPixels(
+            pixels,
+            fileRowIndexStart,
+            fileRowIndexEnd,
+            fileRowIncrement,
+            displayRowMapMultiplier,
+            displayRowMapOffset,
+            masks);
+      } else {
+        read32BppBitfieldPixels(
+            pixels,
+            fileRowIndexStart,
+            fileRowIndexEnd,
+            fileRowIncrement,
+            displayRowMapMultiplier,
+            displayRowMapOffset,
+            masks);
+      }
+    }
+
+    return pixels;
+  }
+
+  /**
+   * Reads pixel data for 16bpp images using bitfield masks and stores ARGB values in the output
+   * array.
+   *
+   * @param pixels 2D array to store resulting ARGB pixel values
+   * @param fileRowIndexStart starting scanline index in the file
+   * @param fileRowIndexEnd exclusive ending scanline index
+   * @param fileRowIncrement step direction for reading scanlines (e.g. -1 for bottom-up)
+   * @param displayRowMapMultiplier multiplier to convert file row to display row
+   * @param displayRowMapOffset offset to convert file row to display row
+   * @param masks array of bitfield masks: [red, green, blue, alpha]
+   */
+  private void read16BppBitfieldPixels(
+      int[][] pixels,
+      int fileRowIndexStart,
+      int fileRowIndexEnd,
+      int fileRowIncrement,
+      int displayRowMapMultiplier,
+      int displayRowMapOffset,
+      long[] masks) {
+
+    int bitsPerPixel = dibHeader.getBitsPerPixel();
+    int width = dibHeader.getWidth();
+
+    if (bitsPerPixel != 16) {
+      throw new IllegalArgumentException(
+          "BI_BITFIELDS compression is only valid for 16 or 32 bits per pixel.");
+    }
+
+    int scanlineByteSize = DIBHeader.calculateScanlineSize(width, bitsPerPixel);
+
+    long redMask = masks[0];
+    long greenMask = masks[1];
+    long blueMask = masks[2];
+    long alphaMask = masks[3];
+
+    for (int i = fileRowIndexStart; i != fileRowIndexEnd; i += fileRowIncrement) {
+      int scanlineOffset = header.getOffset() + (i * scanlineByteSize);
+      int displayRowIndex = displayRowMapOffset + (i * displayRowMapMultiplier);
+
+      for (int x = 0; x < width; x++) {
+        int pixelOffset = scanlineOffset + (x * 2);
+
+        if (pixelOffset < 0 || pixelOffset + 2 > data.length) {
+          throw new IllegalArgumentException(
+              "Pixel data offset out of bounds for 16bpp bitfield pixel at (" + x + "," + i + ")");
+        }
+
+        long pixelData = readShort(data, pixelOffset) & 0xFFFFL;
+
+        int r = extractComponent(pixelData, redMask);
+        int g = extractComponent(pixelData, greenMask);
+        int b = extractComponent(pixelData, blueMask);
+        int a = (alphaMask != 0) ? extractComponent(pixelData, alphaMask) : 0xFF;
+
+        pixels[displayRowIndex][x] = (a << 24) | (r << 16) | (g << 8) | b;
+      }
+    }
+  }
+
+  /**
+   * Reads pixel data for 32bpp images using bitfield masks and stores ARGB values in the output
+   * array.
+   *
+   * <p>This method is used for BMP images with BI_BITFIELDS compression where the layout of the
+   * red, green, blue, and alpha channels is defined via bit masks. Each pixel is 4 bytes.
+   *
+   * @param pixels 2D array to store resulting ARGB pixel values
+   * @param fileRowIndexStart starting scanline index in the file
+   * @param fileRowIndexEnd exclusive ending scanline index
+   * @param fileRowIncrement step direction for reading scanlines (e.g. -1 for bottom-up)
+   * @param displayRowMapMultiplier multiplier to convert file row to display row
+   * @param displayRowMapOffset offset to convert file row to display row
+   * @param masks array of bitfield masks: [red, green, blue, alpha]
+   * @throws IllegalArgumentException if the bits per pixel is not 32
+   */
+  private void read32BppBitfieldPixels(
+      int[][] pixels,
+      int fileRowIndexStart,
+      int fileRowIndexEnd,
+      int fileRowIncrement,
+      int displayRowMapMultiplier,
+      int displayRowMapOffset,
+      long[] masks) {
+
+    int bitsPerPixel = dibHeader.getBitsPerPixel();
+    int width = dibHeader.getWidth();
+
+    if (bitsPerPixel != 32) {
+      throw new IllegalArgumentException(
+          "BI_BITFIELDS compression is only valid for 16 or 32 bits per pixel.");
+    }
+
+    int scanlineByteSize = DIBHeader.calculateScanlineSize(width, bitsPerPixel);
+
+    long redMask = masks[0];
+    long greenMask = masks[1];
+    long blueMask = masks[2];
+    long alphaMask = masks[3];
+
+    for (int i = fileRowIndexStart; i != fileRowIndexEnd; i += fileRowIncrement) {
+      int scanlineOffset = header.getOffset() + (i * scanlineByteSize);
+      int displayRowIndex = displayRowMapOffset + (i * displayRowMapMultiplier);
+
+      for (int x = 0; x < width; x++) {
+        int pixelOffset = scanlineOffset + (x * 4);
+
+        if (pixelOffset < 0 || pixelOffset + 4 > data.length) {
+          throw new IllegalArgumentException(
+              "Pixel data offset out of bounds for 32bpp bitfield pixel at (" + x + "," + i + ")");
+        }
+
+        long pixelData = readInt(data, pixelOffset) & 0xFFFFFFFFL;
+
+        int r = extractComponent(pixelData, redMask);
+        int g = extractComponent(pixelData, greenMask);
+        int b = extractComponent(pixelData, blueMask);
+        int a = (alphaMask != 0) ? extractComponent(pixelData, alphaMask) : 0xFF;
+
+        pixels[displayRowIndex][x] = (a << 24) | (r << 16) | (g << 8) | b;
+      }
+    }
+  }
+
+  /**
+   * Extracts the colour channel bit masks (red, green, blue, alpha) from the DIB header.
+   *
+   * <p><b>Bitfields Compression (BI_BITFIELDS / BI_ALPHABITFIELDS):</b> In some bitmap formats,
+   * especially when using 16bpp or 32bpp with BI_BITFIELDS compression, colour values are not
+   * packed in a fixed layout like RGB888. Instead, each channel is defined by a mask indicating
+   * which bits in the pixel value represent that colour component.
+   *
+   * <p>This method checks for specific extended DIB header types that define these masks:
+   *
+   * <ul>
+   *   <li>{@code BitmapV4Header} – provides red, green, blue, and alpha masks
+   *   <li>{@code BitmapV2InfoHeader} – provides red, green, and blue masks
+   *   <li>{@code BitmapV3InfoHeader} – provides red, green, blue, and alpha mask
+   * </ul>
+   *
+   * <p>If none of the headers provide masks, default masks are applied based on the bit depth:
+   *
+   * <ul>
+   *   <li>For 16bpp: RGB565 (5 red, 6 green, 5 blue)
+   *   <li>For 24bpp/32bpp: ARGB8888 format
+   * </ul>
+   *
+   * @return an array of 4 {@code long} values representing the red, green, blue, and alpha masks
+   *     (in that order)
+   */
+  private long[] extractMasks() {
+    long redMask = 0;
+    long greenMask = 0;
+    long blueMask = 0;
+    long alphaMask = 0;
+
+    if (dibHeader instanceof BitmapV4Header) {
+      BitmapV4Header v4Header = (BitmapV4Header) dibHeader;
+      redMask = v4Header.getRedMask() & 0xFFFFFFFFL;
+      greenMask = v4Header.getGreenMask() & 0xFFFFFFFFL;
+      blueMask = v4Header.getBlueMask() & 0xFFFFFFFFL;
+      alphaMask = v4Header.getAlphaMask() & 0xFFFFFFFFL;
+    }
+
+    if (dibHeader instanceof BitmapV2InfoHeader) {
+      BitmapV2InfoHeader v2Header = (BitmapV2InfoHeader) dibHeader;
+      redMask = v2Header.getRedMask();
+      greenMask = v2Header.getGreenMask();
+      blueMask = v2Header.getBlueMask();
+    }
+
+    if (dibHeader instanceof BitmapV3InfoHeader) {
+      BitmapV3InfoHeader v3Header = (BitmapV3InfoHeader) dibHeader;
+      alphaMask = v3Header.getAlphaMask();
+    }
+
+    // Fallback to common default masks if they were not explicitly found in headers
+    if (redMask == 0 && greenMask == 0 && blueMask == 0) {
+      if (dibHeader.getBitsPerPixel() == 16) {
+        redMask = 0xF800;
+        greenMask = 0x07E0;
+        blueMask = 0x001F;
+        alphaMask = 0x0000;
+      } else {
+        redMask = 0x00FF0000;
+        greenMask = 0x0000FF00;
+        blueMask = 0x000000FF;
+        alphaMask = 0xFF000000L;
+      }
+    }
+
+    return new long[] {redMask, greenMask, blueMask, alphaMask};
+  }
+
+  /**
+   * Helper to extract an 8-bit colour component from raw pixel data using a mask. This takes a
+   * masked component (e.g., 0x00FF0000) and shifts it to be an 8-bit value (0-255). It also scales
+   * components from fewer than 8 bits (e.g., 5-bit to 8-bit).
+   */
+  private int extractComponent(long pixelData, long mask) {
+    if (mask == 0) return 0;
+
+    long maskedValue = pixelData & mask;
+    int shift = 0;
+
+    while (((mask >> shift) & 1) == 0) {
+      shift++;
+    }
+
+    int component = (int) (maskedValue >> shift);
+
+    // Scale component to 0-255 range if its bit depth is less than 8.
+    // For example, a 5-bit component (0-31) needs to be scaled to 0-255.
+    int bitsInComponent = Long.bitCount(mask);
+    if (bitsInComponent > 0 && bitsInComponent < 8) {
+      // Formula for scaling N-bit value to 8-bit (0-255): value * 255 / max_val_for_N_bit
+      int maxComponentValue = (1 << bitsInComponent) - 1;
+      if (maxComponentValue > 0) {
+        component = (component * 255) / maxComponentValue;
+      } else {
+        component = (component > 0) ? 255 : 0;
+      }
+    }
+    return component & 0xFF;
+  }
+
   /** @return the {@link ImageType} for this parser (always {@code BITMAP}) */
   @Override
   public ImageType getType() {
@@ -344,7 +837,6 @@ public class BitmapParser implements IParser {
    * @return the alpha bitmask
    * @throws UnsupportedOperationException if alpha mask is not defined for this header type
    */
-  // TODO: add more specific getters for V4/V5 header fields with proper casting and checks
   public long getAlphaMask() {
     if (InfoHeaderType.BITMAPV3INFOHEADER.equals(dibHeader.getType())) {
       return ((BitmapV3InfoHeader) dibHeader).getAlphaMask();
@@ -385,5 +877,45 @@ public class BitmapParser implements IParser {
   /** @return true if alpha channel is present in the colour palette and false otherwise */
   public boolean hasAlphaChannel() {
     return Objects.requireNonNull(colourPalette).hasAlphaChannel();
+  }
+
+  /**
+   * Reads and returns the pixel data as a 2D array of ARGB integers. Each integer represents a
+   * pixel in AARRGGBB format.
+   *
+   * @return A 2D array (height x width) of pixel data.
+   * @throws IllegalStateException If the image data cannot be read (e.g., parser not initialized,
+   *     colour palette missing, or unsupported compression).
+   * @throws IllegalArgumentException If header values lead to invalid data access.
+   * @throws UnsupportedOperationException If the specific bit depth or compression is not
+   *     implemented.
+   */
+  public int[][] getPixels() {
+    int displayHeight = Math.abs(dibHeader.getHeight());
+    int compression = dibHeader.getCompression();
+
+    int[][] pixels;
+
+    // Logical image row to which the current file row maps
+    // For bottom-up, fileRow 0 maps to displayHeight-1. For top-down, fileRow 0 maps to 0.
+    int displayRowMapMultiplier = dibHeader.getHeight() > 0 ? -1 : 1;
+    int displayRowMapOffset = dibHeader.getHeight() > 0 ? (displayHeight - 1) : 0;
+
+    // Handle Compression
+    if (compression == 0) {
+      pixels = readUncompressedPixels(displayRowMapMultiplier, displayRowMapOffset);
+    } else if (compression == 3) {
+      pixels = readBitfieldPixels(displayRowMapMultiplier, displayRowMapOffset);
+    } else if (compression == 1 || compression == 2) {
+      throw new UnsupportedOperationException(
+          "Run-Length Encoded (RLE) compression is not implemented yet.");
+    } else if (compression == 4 || compression == 5) {
+      throw new UnsupportedOperationException(
+          "JPEG or PNG embedded compression is not supported for direct pixel reading.");
+    } else {
+      throw new UnsupportedOperationException("Unsupported BMP compression type: " + compression);
+    }
+
+    return pixels;
   }
 }

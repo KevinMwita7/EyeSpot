@@ -11,6 +11,9 @@ import java.util.Arrays;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class BitmapParserTest {
 
@@ -18,7 +21,17 @@ class BitmapParserTest {
 
   private static BitmapParser commonParserWithColourPalette;
 
+  private static BitmapParser common8BitWithColourPaletteParser;
+
+  private static BitmapParser common16BitParser;
+
+  private static BitmapParser common32BitParser;
+
   private static BitmapParser coreParser;
+
+  private static BitmapParser core1BitWithColourPaletteParser;
+
+  private static BitmapParser core4BitWithColourPaletteParser;
 
   private static BitmapParser v2Parser;
 
@@ -27,6 +40,8 @@ class BitmapParserTest {
   private static BitmapParser v4Parser;
 
   private static BitmapParser v4ParserWithPaletteAndAlpha;
+
+  private static BitmapParser badBitCountParser;
 
   private static BitmapV4Header v4Header;
 
@@ -59,6 +74,25 @@ class BitmapParserTest {
         (BitmapInfoHeader)
             DIBHeader.createDIBHeader(Arrays.copyOfRange(commonParser.getRawData(), 0, 54));
 
+    // Parser for 8bpp bitmap with BITMAPINFOHEADER
+    URL common8BitWithColourPaletteResource =
+        BitmapParserTest.class.getClassLoader().getResource("info_header_8bit.bmp");
+    Assertions.assertNotNull(common8BitWithColourPaletteResource);
+    common8BitWithColourPaletteParser =
+        new BitmapParser(Paths.get(common8BitWithColourPaletteResource.toURI()));
+
+    // Parser for 16bpp bitmap with BITMAPINFOHEADER
+    URL commonParser16BitResource =
+        BitmapParserTest.class.getClassLoader().getResource("16bit.bmp");
+    Assertions.assertNotNull(commonParser16BitResource);
+    common16BitParser = new BitmapParser(Paths.get(commonParser16BitResource.toURI()));
+
+    // Parser for 32bpp bitmap with BITMAPINFOHEADER
+    URL commonParser32BitResource =
+        BitmapParserTest.class.getClassLoader().getResource("info_header_32bit.bmp");
+    Assertions.assertNotNull(commonParser32BitResource);
+    common32BitParser = new BitmapParser(Paths.get(commonParser32BitResource.toURI()));
+
     // Parser and header for bitmap with BITMAPCOREHEADER
     URL coreResource = BitmapParserTest.class.getClassLoader().getResource("bmp_1000x500.bmp");
     Assertions.assertNotNull(coreResource);
@@ -67,6 +101,20 @@ class BitmapParserTest {
     coreHeader =
         (BitmapCoreHeader)
             DIBHeader.createDIBHeader(Arrays.copyOfRange(coreParser.getRawData(), 0, 26));
+
+    // Parser for 1bpp bitmap with BITMAPCOREHEADER
+    URL core1BitWithColourPaletteResource =
+        BitmapParserTest.class.getClassLoader().getResource("core_header_1bit.bmp");
+    Assertions.assertNotNull(core1BitWithColourPaletteResource);
+    core1BitWithColourPaletteParser =
+        new BitmapParser(Paths.get(core1BitWithColourPaletteResource.toURI()));
+
+    // Parser for 4bpp bitmap with BITMAPCOREHEADER
+    URL core4BitWithColourPaletteResource =
+        BitmapParserTest.class.getClassLoader().getResource("core_header_4bit.bmp");
+    Assertions.assertNotNull(core4BitWithColourPaletteResource);
+    core4BitWithColourPaletteParser =
+        new BitmapParser(Paths.get(core4BitWithColourPaletteResource.toURI()));
 
     // Parser and header for bitmap with BITMAPV2INFOHEADER
     URL v2Resource = BitmapParserTest.class.getClassLoader().getResource("bmp_v2_500x250.bmp");
@@ -110,6 +158,12 @@ class BitmapParserTest {
     v5Header =
         (BitmapV5Header)
             DIBHeader.createDIBHeader(Arrays.copyOfRange(v5Parser.getRawData(), 0, 138));
+
+    // Parser for bitmap with a bad bit count
+    URL badBitCounterResource =
+        BitmapParserTest.class.getClassLoader().getResource("badbitcount.bmp");
+    Assertions.assertNotNull(badBitCounterResource);
+    badBitCountParser = new BitmapParser(Paths.get(badBitCounterResource.toURI()));
   }
 
   @Test
@@ -136,6 +190,23 @@ class BitmapParserTest {
   }
 
   @Test
+  void GivenBitmapWithBadBitCount_GetPixels_ThrowsUnsupportedOperationException() {
+    Executable executable = () -> badBitCountParser.getPixels();
+    Assertions.assertThrows(UnsupportedOperationException.class, executable);
+  }
+
+  // Bitmap with BITMAPCOREHEADER tests
+  @Test
+  void GivenCoreBitmapImage_GetType_ReturnsBitmap() {
+    Assertions.assertEquals(ImageType.BITMAP, coreParser.getType());
+  }
+
+  @Test
+  void GivenCoreBitmap_GetHeaderType_ReturnsBitmapCoreHeader() {
+    Assertions.assertEquals(InfoHeaderType.BITMAPCOREHEADER, coreParser.getDibHeaderType());
+  }
+
+  @Test
   void GivenCoreBitmapImage_HeaderSizeShort_ThrowsIllegalArgException() {
     byte[] bytes = Arrays.copyOfRange(coreParser.getRawData(), 0, 25);
     Assertions.assertThrows(IllegalArgumentException.class, () -> new BitmapParser(bytes));
@@ -152,15 +223,56 @@ class BitmapParserTest {
   }
 
   @Test
-  void GivenCommonBitmapImage_HeaderSizeShort_ThrowsIllegalArgException() {
-    byte[] bytes = Arrays.copyOfRange(commonParser.getRawData(), 0, 53);
-    Assertions.assertThrows(IllegalArgumentException.class, () -> new BitmapParser(bytes));
+  void GivenCoreBitmap_PixelArraySize_EqualsDataArrayMinusOffset() {
+    int[][] pixels = coreParser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    int expectedPixelSize = (coreParser.getRawData().length - coreParser.getOffset()) / 3;
+    Assertions.assertEquals(expectedPixelSize, totalElements);
   }
 
   @Test
-  void GivenV2BitmapImage_HeaderSizeShort_ThrowsIllegalArgException() {
-    byte[] bytes = Arrays.copyOfRange(v2Parser.getRawData(), 0, 55);
-    Assertions.assertThrows(IllegalArgumentException.class, () -> new BitmapParser(bytes));
+  void GivenCoreBitmapImage_GetColourPlanes_ReturnsCorrectValue() {
+    Assertions.assertEquals(1, coreHeader.getColourPlanes());
+  }
+
+  @Test
+  void GivenCoreBitmapImageWithColourPalette_HasColourPalette_ReturnsTrue() {
+    Assertions.assertTrue(core1BitWithColourPaletteParser.hasColourPalette());
+  }
+
+  @Test
+  void GivenCoreBitmap_GetPixels_ReturnsAllPixels() {
+    int[][] pixels = coreParser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(coreParser.getWidth() * coreParser.getHeight(), totalElements);
+  }
+
+  @Test
+  void Given1bppCoreBitmapImageWithColourPalette_GetBitsPerPixel_Returns1() {
+    Assertions.assertEquals(1, core1BitWithColourPaletteParser.getBitsPerPixel());
+  }
+
+  @Test
+  void Given1bppCoreBitmapImageWithColourPalette_GetPixels_ReturnsAllPixels() {
+    int[][] pixels = core1BitWithColourPaletteParser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(
+        core1BitWithColourPaletteParser.getWidth() * core1BitWithColourPaletteParser.getHeight(),
+        totalElements);
+  }
+
+  @Test
+  void Given4bppCoreBitmapImageWithColourPalette_GetBitsPerPixel_Returns4() {
+    Assertions.assertEquals(4, core4BitWithColourPaletteParser.getBitsPerPixel());
+  }
+
+  @Test
+  void Given4bppCoreBitmapImageWithColourPalette_GetPixels_ReturnsAllPixels() {
+    int[][] pixels = core4BitWithColourPaletteParser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(
+        core4BitWithColourPaletteParser.getWidth() * core4BitWithColourPaletteParser.getHeight(),
+        totalElements);
   }
 
   // Bitmap with BITMAPINFOHEADER tests
@@ -172,6 +284,12 @@ class BitmapParserTest {
     byte[] bytes = Files.readAllBytes(Paths.get(resource.toURI()));
 
     Assertions.assertArrayEquals(commonParser.getRawData(), bytes);
+  }
+
+  @Test
+  void GivenCommonBitmapImage_HeaderSizeShort_ThrowsIllegalArgException() {
+    byte[] bytes = Arrays.copyOfRange(commonParser.getRawData(), 0, 53);
+    Assertions.assertThrows(IllegalArgumentException.class, () -> new BitmapParser(bytes));
   }
 
   @Test
@@ -257,7 +375,7 @@ class BitmapParserTest {
 
   @Test
   void GivenCommonBitmapImageWithColourPalette_HasAlphaChannel_ReturnsTrue() {
-    Assertions.assertFalse(commonParserWithColourPalette.hasAlphaChannel());
+    Assertions.assertTrue(commonParserWithColourPalette.hasAlphaChannel());
   }
 
   @Test
@@ -287,18 +405,96 @@ class BitmapParserTest {
     Assertions.assertEquals(49_152, parser.getImageDataSize());
   }
 
-  // Bitmap with BITMAPCOREHEADER tests
   @Test
-  void GivenCoreBitmapImage_GetType_ReturnsBitmap() {
-    Assertions.assertEquals(ImageType.BITMAP, coreParser.getType());
+  void GivenCommonWithColourPaletteBitmap_GetPixels_ReturnsAllPixels() {
+    int[][] pixels = commonParserWithColourPalette.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(
+        commonParserWithColourPalette.getWidth() * commonParserWithColourPalette.getHeight(),
+        totalElements);
   }
 
   @Test
-  void GivenCoreBitmap_GetHeaderType_ReturnsBitmapCoreHeader() {
-    Assertions.assertEquals(InfoHeaderType.BITMAPCOREHEADER, coreParser.getDibHeaderType());
+  void GivenCommonWithColourPaletteBitmap_PixelArraySize_EqualsDataArrayMinusOffset() {
+    int[][] pixels = commonParserWithColourPalette.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    int expectedPixelSize =
+        (commonParserWithColourPalette.getRawData().length
+            - commonParserWithColourPalette.getOffset());
+    Assertions.assertEquals(expectedPixelSize, totalElements);
   }
 
+  @Test
+  void GivenCommonBitmap_GetPixels_ReturnsAllPixels() {
+    int[][] pixels = commonParser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(commonParser.getWidth() * commonParser.getHeight(), totalElements);
+  }
+
+  @Test
+  void GivenCommonBitmap_PixelArraySize_EqualsDataArrayMinusOffset() {
+    int[][] pixels = commonParser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    int expectedPixelSize = (commonParser.getRawData().length - commonParser.getOffset()) / 3;
+    Assertions.assertEquals(expectedPixelSize, totalElements);
+  }
+
+  @Test
+  void Given8bppCommonBitmapImageWithColourPalette_GetBitsPerPixel_Returns8() {
+    Assertions.assertEquals(8, common8BitWithColourPaletteParser.getBitsPerPixel());
+  }
+
+  @Test
+  void Given16bppCommonBitmapImageWithoutColourPalette_GetPixels_ReturnsAllPixels() {
+    int[][] pixels = common16BitParser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(
+        common16BitParser.getWidth() * common16BitParser.getHeight(), totalElements);
+  }
+
+  @Test
+  void Given16bppCommonBitmapImageWithoutColourPalette_GetBitsPerPixel_Returns16() {
+    Assertions.assertEquals(16, common16BitParser.getBitsPerPixel());
+  }
+
+  @Test
+  void Given8bppCommonBitmapImageWithColourPalette_GetPixels_ReturnsAllPixels() {
+    int[][] pixels = common8BitWithColourPaletteParser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(
+        common8BitWithColourPaletteParser.getWidth()
+            * common8BitWithColourPaletteParser.getHeight(),
+        totalElements);
+  }
+
+  @Test
+  void Given32BppCommonBitmap_GetBitsPerPixel_Returns32() {
+    Assertions.assertEquals(32, common32BitParser.getBitsPerPixel());
+  }
+
+  @Test
+  void Given32BppCommonBitmap_GetPixels_ReturnsAllPixels() {
+    int[][] pixels = common32BitParser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(
+        common32BitParser.getWidth() * common32BitParser.getHeight(), totalElements);
+  }
   // Bitmap with BITMAPV2INFOHEADER tests
+  @Test
+  void GivenV2Bitmap_GetPixels_ReturnsAllPixels() {
+    int[][] pixels = v2Parser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(v2Parser.getWidth() * v2Parser.getHeight(), totalElements);
+  }
+
+  @Test
+  void GivenV2Bitmap_PixelArraySize_EqualsDataArrayMinusOffset() {
+    int[][] pixels = v2Parser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    int expectedPixelSize = (v2Parser.getRawData().length - v2Parser.getOffset()) / 3;
+    Assertions.assertEquals(expectedPixelSize, totalElements);
+  }
+
   @Test
   void GivenV2BitmapImage_GetType_ReturnsBitmap() {
     Assertions.assertEquals(ImageType.BITMAP, v2Parser.getType());
@@ -335,13 +531,24 @@ class BitmapParserTest {
   }
 
   @Test
-  void GivenCoreBitmapImage_GetColourPlanes_ReturnsCorrectValue() {
-    Assertions.assertEquals(1, coreHeader.getColourPlanes());
+  void GivenV2BitmapImage_GetColourPlanes_ReturnsCorrectValue() {
+    Assertions.assertEquals(1, v2InfoHeader.getColourPlanes());
   }
 
   @Test
-  void GivenV2BitmapImage_GetColourPlanes_ReturnsCorrectValue() {
-    Assertions.assertEquals(1, v2InfoHeader.getColourPlanes());
+  void GivenV2BitmapImage_HeaderSizeShort_ThrowsIllegalArgException() {
+    byte[] bytes = Arrays.copyOfRange(v2Parser.getRawData(), 0, 55);
+    Assertions.assertThrows(IllegalArgumentException.class, () -> new BitmapParser(bytes));
+  }
+
+  @Test
+  void GivenCompressedV2BitmapImage_WhenGetPixel_DoesNotThrow()
+      throws URISyntaxException, IOException {
+    URL paletteResource =
+        BitmapParserTest.class.getClassLoader().getResource("v2_info_header_bi_bitfields.bmp");
+    Assertions.assertNotNull(paletteResource);
+    BitmapParser bitmapParser = new BitmapParser(Paths.get(paletteResource.toURI()));
+    Assertions.assertDoesNotThrow(bitmapParser::getPixels);
   }
 
   // Bitmap with BITMAPV3INFOHEADER tests
@@ -383,6 +590,23 @@ class BitmapParserTest {
   @Test
   void GivenV3BitmapImage_GetColourPlanes_ReturnsCorrectValue() {
     Assertions.assertEquals(1, v3InfoHeader.getColourPlanes());
+  }
+
+  @Test
+  void GivenV3Bitmap_GetPixels_ReturnsAllPixels() {
+    int[][] pixels = v3Parser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(v3Parser.getWidth() * v3Parser.getHeight(), totalElements);
+  }
+
+  @Test
+  void GivenCompressedV3BitmapImage_WhenGetPixel_DoesNotThrow()
+      throws URISyntaxException, IOException {
+    URL paletteResource =
+        BitmapParserTest.class.getClassLoader().getResource("v3_info_header_bi_bitfields.bmp");
+    Assertions.assertNotNull(paletteResource);
+    BitmapParser bitmapParser = new BitmapParser(Paths.get(paletteResource.toURI()));
+    Assertions.assertDoesNotThrow(bitmapParser::getPixels);
   }
 
   // Bitmap with BITMAPV4HEADER tests
@@ -502,6 +726,21 @@ class BitmapParserTest {
     Assertions.assertTrue(v4ParserWithPaletteAndAlpha.hasAlphaChannel());
   }
 
+  @Test
+  void GivenV4Bitmap_GetPixels_ReturnsAllPixels() {
+    int[][] pixels = v4Parser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(v4Parser.getWidth() * v4Parser.getHeight(), totalElements);
+  }
+
+  @Test
+  void GivenV4Bitmap_PixelArraySize_EqualsDataArrayMinusOffset() {
+    int[][] pixels = v4Parser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    int expectedPixelSize = (v4Parser.getRawData().length - v4Parser.getOffset()) / 4;
+    Assertions.assertEquals(expectedPixelSize, totalElements);
+  }
+
   // Bitmap with BITMAPV5HEADER tests
   @Test
   void GivenV5Bitmap_GetType_ReturnsCorrectValue() {
@@ -547,5 +786,106 @@ class BitmapParserTest {
   void GivenV5Bitmap_HeaderShort_ThrowsIllegalArgumentException() {
     byte[] bytes = Arrays.copyOfRange(v5Parser.getRawData(), 0, 137);
     Assertions.assertThrows(IllegalArgumentException.class, () -> DIBHeader.createDIBHeader(bytes));
+  }
+
+  // Compression tests
+  @ParameterizedTest
+  @ValueSource(bytes = {1, 2, 4, 5, 6})
+  void GivenUnsupportedCompression_GetPixels_ThrowsUnsupportedOperationException(byte i) {
+    byte[] bytes = Arrays.copyOfRange(commonParser.getRawData(), 0, 55);
+    bytes[30] = i;
+    BitmapParser parser = new BitmapParser(bytes);
+    Assertions.assertThrows(UnsupportedOperationException.class, parser::getPixels);
+  }
+
+  // Invalid pixel offset
+  @Test
+  void GivenBitmapImageWithOffsetGreaterThanDataLength_GetPixels_ThrowsIllegalArgumentException() {
+    byte[] bytes =
+        new byte[] {
+          0x42,
+          0x4D,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          54,
+          0x00,
+          0x00,
+          0x00,
+          40,
+          0x00,
+          0x00,
+          0x00,
+          0x01,
+          0x00,
+          0x00,
+          0x00,
+          1,
+          0x00,
+          0x00,
+          0x00,
+          0x01,
+          0x00,
+          32,
+          0x00,
+          3,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          0x00,
+          (byte) 0xFF,
+          (byte) 0x00,
+          (byte) 0x00
+        };
+    BitmapParser parser = new BitmapParser(bytes);
+    Assertions.assertThrows(IllegalArgumentException.class, parser::getPixels);
+  }
+
+  @Test
+  void Given16BppCompressedBitmap_WhenGetPixels_ThenReturnCorrectPixels()
+      throws URISyntaxException, IOException {
+    URL paletteResource =
+        BitmapParserTest.class.getClassLoader().getResource("16bit_555_bitfield.bmp");
+    Assertions.assertNotNull(paletteResource);
+    BitmapParser parser = new BitmapParser(Paths.get(paletteResource.toURI()));
+    int[][] pixels = parser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(parser.getWidth() * parser.getHeight(), totalElements);
+  }
+
+  // Negative height
+  @Test
+  void GivenBitmapWithNegativeHeight_WhenGetPixels_ThenDoesNotThrow() {
+    byte[] bytes = Arrays.copyOfRange(commonParser.getRawData(), 0, 55);
+    bytes[22] = (byte) 0x38;
+    bytes[23] = (byte) 0xFF;
+    bytes[24] = (byte) 0xFF;
+    bytes[25] = (byte) 0xFF;
+    BitmapParser parser = new BitmapParser(bytes);
+    Assertions.assertThrows(IllegalArgumentException.class, parser::getPixels);
   }
 }
