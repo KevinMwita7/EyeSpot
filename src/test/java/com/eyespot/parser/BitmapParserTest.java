@@ -875,8 +875,7 @@ class BitmapParserTest {
       })
   void Given16BppCompressedBitmap_WhenGetPixels_ThenReturnCorrectPixels(String s)
       throws URISyntaxException, IOException {
-    URL paletteResource =
-        BitmapParserTest.class.getClassLoader().getResource(s);
+    URL paletteResource = BitmapParserTest.class.getClassLoader().getResource(s);
     Assertions.assertNotNull(paletteResource);
     BitmapParser parser = new BitmapParser(Paths.get(paletteResource.toURI()));
     int[][] pixels = parser.getPixels();
