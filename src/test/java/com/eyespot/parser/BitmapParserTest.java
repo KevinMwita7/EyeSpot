@@ -865,11 +865,18 @@ class BitmapParserTest {
     Assertions.assertThrows(IllegalArgumentException.class, parser::getPixels);
   }
 
-  @Test
-  void Given16BppCompressedBitmap_WhenGetPixels_ThenReturnCorrectPixels()
+  // Blue mask only, blue and green mask only
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "16bit_555_bitfield.bmp",
+        "v2_info_header_32bpp_red_mask_zero.bmp",
+        "v2_info_header_32bpp_blue_mask_only.bmp"
+      })
+  void Given16BppCompressedBitmap_WhenGetPixels_ThenReturnCorrectPixels(String s)
       throws URISyntaxException, IOException {
     URL paletteResource =
-        BitmapParserTest.class.getClassLoader().getResource("16bit_555_bitfield.bmp");
+        BitmapParserTest.class.getClassLoader().getResource(s);
     Assertions.assertNotNull(paletteResource);
     BitmapParser parser = new BitmapParser(Paths.get(paletteResource.toURI()));
     int[][] pixels = parser.getPixels();

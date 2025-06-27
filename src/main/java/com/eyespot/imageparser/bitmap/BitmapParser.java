@@ -494,14 +494,8 @@ public class BitmapParser implements IParser {
     int fileRowIndexStart = 0;
     int fileRowIncrement = 1;
     int fileRowIndexEnd = Math.abs(dibHeader.getHeight());
-    int bitsPerPixel = dibHeader.getBitsPerPixel();
     int width = dibHeader.getWidth();
     int[][] pixels = new int[Math.abs(dibHeader.getHeight())][width];
-
-    if (bitsPerPixel != 16 && bitsPerPixel != 32) {
-      throw new IllegalArgumentException(
-          "BI_BITFIELDS compression is only valid for 16 or 32 bits per pixel.");
-    }
 
     long[] masks = extractMasks();
 
