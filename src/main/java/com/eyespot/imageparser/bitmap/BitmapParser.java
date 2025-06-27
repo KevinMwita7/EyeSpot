@@ -428,8 +428,8 @@ public class BitmapParser implements IParser {
 
           // Convert 5-bit components to 8-bit.
           int b = (pixelData & 0x001F) << 3;
-          int g = ((pixelData & 0x03E0) >> 5) << 3;
-          int r = ((pixelData & 0x7C00) >> 10) << 3;
+          int g = (pixelData & 0x03E0 >> 5) << 3;
+          int r = (pixelData & 0x7C00 >> 10) << 3;
 
           return (0xFF << 24) | (r << 16) | (g << 8) | b;
         }
@@ -506,34 +506,22 @@ public class BitmapParser implements IParser {
     long[] masks = extractMasks();
 
     for (int i = fileRowIndexStart; i != fileRowIndexEnd; i += fileRowIncrement) {
-
-      if (bitsPerPixel == 16) {
-        read16BppBitfieldPixels(
-            pixels,
-            fileRowIndexStart,
-            fileRowIndexEnd,
-            fileRowIncrement,
-            displayRowMapMultiplier,
-            displayRowMapOffset,
-            masks);
-      } else {
-        read32BppBitfieldPixels(
-            pixels,
-            fileRowIndexStart,
-            fileRowIndexEnd,
-            fileRowIncrement,
-            displayRowMapMultiplier,
-            displayRowMapOffset,
-            masks);
-      }
+      readBitfieldPixels16Or32Bpp(
+          pixels,
+          fileRowIndexStart,
+          fileRowIndexEnd,
+          fileRowIncrement,
+          displayRowMapMultiplier,
+          displayRowMapOffset,
+          masks);
     }
 
     return pixels;
   }
 
   /**
-   * Reads pixel data for 16bpp images using bitfield masks and stores ARGB values in the output
-   * array.
+   * Reads pixel data for 16bpp and 32bpp images using bitfield masks and stores ARGB values in the
+   * output array.
    *
    * @param pixels 2D array to store resulting ARGB pixel values
    * @param fileRowIndexStart starting scanline index in the file
@@ -543,7 +531,7 @@ public class BitmapParser implements IParser {
    * @param displayRowMapOffset offset to convert file row to display row
    * @param masks array of bitfield masks: [red, green, blue, alpha]
    */
-  private void read16BppBitfieldPixels(
+  private void readBitfieldPixels16Or32Bpp(
       int[][] pixels,
       int fileRowIndexStart,
       int fileRowIndexEnd,
@@ -555,7 +543,7 @@ public class BitmapParser implements IParser {
     int bitsPerPixel = dibHeader.getBitsPerPixel();
     int width = dibHeader.getWidth();
 
-    if (bitsPerPixel != 16) {
+    if (bitsPerPixel != 16 && bitsPerPixel != 32) {
       throw new IllegalArgumentException(
           "BI_BITFIELDS compression is only valid for 16 or 32 bits per pixel.");
     }
@@ -567,83 +555,24 @@ public class BitmapParser implements IParser {
     long blueMask = masks[2];
     long alphaMask = masks[3];
 
-    for (int i = fileRowIndexStart; i != fileRowIndexEnd; i += fileRowIncrement) {
-      int scanlineOffset = header.getOffset() + (i * scanlineByteSize);
-      int displayRowIndex = displayRowMapOffset + (i * displayRowMapMultiplier);
-
-      for (int x = 0; x < width; x++) {
-        int pixelOffset = scanlineOffset + (x * 2);
-
-        if (pixelOffset < 0 || pixelOffset + 2 > data.length) {
-          throw new IllegalArgumentException(
-              "Pixel data offset out of bounds for 16bpp bitfield pixel at (" + x + "," + i + ")");
-        }
-
-        long pixelData = readShort(data, pixelOffset) & 0xFFFFL;
-
-        int r = extractComponent(pixelData, redMask);
-        int g = extractComponent(pixelData, greenMask);
-        int b = extractComponent(pixelData, blueMask);
-        int a = (alphaMask != 0) ? extractComponent(pixelData, alphaMask) : 0xFF;
-
-        pixels[displayRowIndex][x] = (a << 24) | (r << 16) | (g << 8) | b;
-      }
-    }
-  }
-
-  /**
-   * Reads pixel data for 32bpp images using bitfield masks and stores ARGB values in the output
-   * array.
-   *
-   * <p>This method is used for BMP images with BI_BITFIELDS compression where the layout of the
-   * red, green, blue, and alpha channels is defined via bit masks. Each pixel is 4 bytes.
-   *
-   * @param pixels 2D array to store resulting ARGB pixel values
-   * @param fileRowIndexStart starting scanline index in the file
-   * @param fileRowIndexEnd exclusive ending scanline index
-   * @param fileRowIncrement step direction for reading scanlines (e.g. -1 for bottom-up)
-   * @param displayRowMapMultiplier multiplier to convert file row to display row
-   * @param displayRowMapOffset offset to convert file row to display row
-   * @param masks array of bitfield masks: [red, green, blue, alpha]
-   * @throws IllegalArgumentException if the bits per pixel is not 32
-   */
-  private void read32BppBitfieldPixels(
-      int[][] pixels,
-      int fileRowIndexStart,
-      int fileRowIndexEnd,
-      int fileRowIncrement,
-      int displayRowMapMultiplier,
-      int displayRowMapOffset,
-      long[] masks) {
-
-    int bitsPerPixel = dibHeader.getBitsPerPixel();
-    int width = dibHeader.getWidth();
-
-    if (bitsPerPixel != 32) {
-      throw new IllegalArgumentException(
-          "BI_BITFIELDS compression is only valid for 16 or 32 bits per pixel.");
-    }
-
-    int scanlineByteSize = DIBHeader.calculateScanlineSize(width, bitsPerPixel);
-
-    long redMask = masks[0];
-    long greenMask = masks[1];
-    long blueMask = masks[2];
-    long alphaMask = masks[3];
+    int leap = bitsPerPixel == 16 ? 2 : 4;
+    long unsignedShortMask = bitsPerPixel == 16 ? 0xFFFFL : 0xFFFFFFFFL;
 
     for (int i = fileRowIndexStart; i != fileRowIndexEnd; i += fileRowIncrement) {
       int scanlineOffset = header.getOffset() + (i * scanlineByteSize);
       int displayRowIndex = displayRowMapOffset + (i * displayRowMapMultiplier);
 
       for (int x = 0; x < width; x++) {
-        int pixelOffset = scanlineOffset + (x * 4);
+        int pixelOffset = scanlineOffset + (x * leap);
 
-        if (pixelOffset < 0 || pixelOffset + 4 > data.length) {
+        if (pixelOffset < 0 || pixelOffset + leap > data.length) {
           throw new IllegalArgumentException(
-              "Pixel data offset out of bounds for 32bpp bitfield pixel at (" + x + "," + i + ")");
+              String.format(
+                  "Pixel data offset out of bounds for %d bitfield pixel at (%d, %d)",
+                  bitsPerPixel, x, i));
         }
 
-        long pixelData = readInt(data, pixelOffset) & 0xFFFFFFFFL;
+        long pixelData = readShort(data, pixelOffset) & unsignedShortMask;
 
         int r = extractComponent(pixelData, redMask);
         int g = extractComponent(pixelData, greenMask);
@@ -749,9 +678,9 @@ public class BitmapParser implements IParser {
       // Formula for scaling N-bit value to 8-bit (0-255): value * 255 / max_val_for_N_bit
       int maxComponentValue = (1 << bitsInComponent) - 1;
       if (maxComponentValue > 0) {
-        component = (component * 255) / maxComponentValue;
+        component = component * 255 / maxComponentValue;
       } else {
-        component = (component > 0) ? 255 : 0;
+        component = component > 0 ? 255 : 0;
       }
     }
     return component & 0xFF;
