@@ -61,6 +61,9 @@
         <artifactId>maven-pmd-plugin</artifactId>
         <version>${pmd.version}</version>
         <configuration>
+          <rulesets>
+            <ruleset>rulesets/java/quickstart.xml</ruleset>
+          </rulesets>
           <failOnViolation>true</failOnViolation>
         </configuration>
         <executions>

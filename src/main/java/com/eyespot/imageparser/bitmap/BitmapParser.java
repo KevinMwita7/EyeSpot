@@ -660,7 +660,9 @@ public class BitmapParser implements IParser {
    * components from fewer than 8 bits (e.g., 5-bit to 8-bit).
    */
   private int extractComponent(long pixelData, long mask) {
-    if (mask == 0) return 0;
+    if (mask == 0) {
+      return 0;
+    }
 
     long maskedValue = pixelData & mask;
     int shift = 0;
@@ -828,7 +830,7 @@ public class BitmapParser implements IParser {
     // Logical image row to which the current file row maps
     // For bottom-up, fileRow 0 maps to displayHeight-1. For top-down, fileRow 0 maps to 0.
     int displayRowMapMultiplier = dibHeader.getHeight() > 0 ? -1 : 1;
-    int displayRowMapOffset = dibHeader.getHeight() > 0 ? (displayHeight - 1) : 0;
+    int displayRowMapOffset = dibHeader.getHeight() > 0 ? displayHeight - 1 : 0;
 
     // Handle Compression
     if (compression == 0) {
