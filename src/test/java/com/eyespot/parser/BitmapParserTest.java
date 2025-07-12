@@ -545,6 +545,17 @@ class BitmapParserTest {
     Assertions.assertThrows(IllegalArgumentException.class, parser::getPixels);
   }
 
+  // Malformed non-8bpp with BI_RLE8 compression
+  @Test
+  void GivenNon8BppCompressedBIRLE8Bitmap_GetPixels_ThrowsIllegalArgumentException()
+      throws URISyntaxException, IOException {
+    URL resource =
+        BitmapParserTest.class.getClassLoader().getResource("bmp_common_4bpp_rle8_with_delta.bmp");
+    Assertions.assertNotNull(resource);
+    BitmapParser parser = new BitmapParser(Paths.get(resource.toURI()));
+    Assertions.assertThrows(IllegalArgumentException.class, parser::getPixels);
+  }
+
   // Bitmap with BITMAPV2INFOHEADER tests
   @Test
   void GivenV2Bitmap_GetPixels_ReturnsAllPixels() {
