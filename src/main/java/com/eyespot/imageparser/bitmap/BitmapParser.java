@@ -256,11 +256,11 @@ public class BitmapParser implements IParser {
   }
 
   /** Helper method to read uncompressed (BI_RGB) pixel data into the pixels array. */
-  private int[][] readUncompressedPixels(int displayRowMapMultiplier, int displayRowMapOffset) {
+  private void readUncompressedPixels(
+      int[][] pixels, int displayRowMapMultiplier, int displayRowMapOffset) {
 
     int width = dibHeader.getWidth();
     int height = Math.abs(dibHeader.getHeight());
-    int[][] pixels = new int[height][width];
     int bitsPerPixel = dibHeader.getBitsPerPixel();
     int scanlineByteSize = DIBHeader.calculateScanlineSize(width, bitsPerPixel);
     int fileRowIndexStart = 0;
@@ -292,8 +292,6 @@ public class BitmapParser implements IParser {
         pixels[displayRowIndex][x] = pixelValueARGB;
       }
     }
-
-    return pixels;
   }
 
   /**
@@ -486,16 +484,14 @@ public class BitmapParser implements IParser {
    *
    * @param displayRowMapMultiplier multiplier for converting file row index to display row index
    * @param displayRowMapOffset offset to apply after scaling the file row index for display mapping
-   * @return a 2D int array of ARGB pixel values representing the image
    * @throws IllegalArgumentException if the image's bits per pixel is not 16 or 32
    */
-  private int[][] readBitfieldPixels(int displayRowMapMultiplier, int displayRowMapOffset) {
+  private void readBitfieldPixels(
+      int[][] pixels, int displayRowMapMultiplier, int displayRowMapOffset) {
 
     int fileRowIndexStart = 0;
     int fileRowIncrement = 1;
     int fileRowIndexEnd = Math.abs(dibHeader.getHeight());
-    int width = dibHeader.getWidth();
-    int[][] pixels = new int[Math.abs(dibHeader.getHeight())][width];
 
     long[] masks = extractMasks();
 
@@ -509,8 +505,6 @@ public class BitmapParser implements IParser {
           displayRowMapOffset,
           masks);
     }
-
-    return pixels;
   }
 
   /**
@@ -575,6 +569,194 @@ public class BitmapParser implements IParser {
 
         pixels[displayRowIndex][x] = (a << 24) | (r << 16) | (g << 8) | b;
       }
+    }
+  }
+
+  /**
+   * Decodes pixel data compressed using BI_RLE8 (Run-Length Encoding for 8-bit BMP images). This
+   * method reads the compressed byte stream and fills the provided pixels array. It handles both
+   * encoded runs and absolute runs, mapping logical coordinates to display coordinates.
+   *
+   * @param pixels the 2D output pixel array to write decoded colors into
+   * @param displayRowMapMultiplier determines if rows are bottom-up (-1) or top-down (1)
+   * @param displayRowMapOffset offset to apply to the row index for display ordering
+   * @throws IllegalArgumentException if the DIB header does not specify 8 bits per pixel, or if the
+   *     data stream is malformed
+   */
+  private void readRLE8Pixels(
+      int[][] pixels, int displayRowMapMultiplier, int displayRowMapOffset) {
+    if (dibHeader.getBitsPerPixel() != 8) {
+      throw new IllegalArgumentException("BI_RLE8 compression is only valid for 8 bits per pixel.");
+    }
+
+    int currentFileOffset = header.getOffset();
+    int currentX = 0;
+    int currentY = 0;
+    final int endOfLine = 0x00;
+    final int endOfBitmap = 0x01;
+    final int delta = 0x02;
+
+    // Loop through the compressed data until EOB
+    while (currentFileOffset < data.length) {
+      // Need at least 2 bytes for any command or encoded run
+      if (currentFileOffset + 1 > data.length) {
+        break;
+      }
+      int runLength = data[currentFileOffset++] & 0xFF;
+
+      if (runLength != 0) {
+        ensureBytesAvailable(
+            currentFileOffset, 1, "RLE8 decoding error: Missing color index for encoded run.");
+        int colourIndex = data[currentFileOffset++] & 0xFF;
+        currentX =
+            writeBIRLE8EncodedRun(
+                pixels,
+                runLength,
+                displayRowMapOffset,
+                displayRowMapMultiplier,
+                currentX,
+                currentY,
+                colourIndex);
+      } else {
+        ensureBytesAvailable(
+            currentFileOffset, 1, "RLE8 decoding error: Missing escape code parameter.");
+        int code = data[currentFileOffset++] & 0xFF;
+
+        switch (code) {
+          case endOfLine:
+            // CRLF
+            currentX = 0;
+            currentY++;
+            break;
+          case endOfBitmap:
+            return;
+          case delta:
+            ensureBytesAvailable(
+                currentFileOffset, 2, "RLE8 decoding error: Missing delta offsets (x, y).");
+            int dx = data[currentFileOffset++] & 0xFF;
+            int dy = data[currentFileOffset++] & 0xFF;
+
+            currentX += dx;
+            currentY += dy;
+            break;
+            // Absolute Mode (byte2 is count > 2)
+          default:
+            ensureBytesAvailable(
+                currentFileOffset,
+                code,
+                "RLE8 decoding error: Not enough data for absolute run of " + code + " pixels.");
+            currentX =
+                writeBIRLE8AbsoluteRun(
+                    pixels,
+                    code,
+                    displayRowMapOffset,
+                    displayRowMapMultiplier,
+                    currentX,
+                    currentY,
+                    currentFileOffset);
+            // Advance past pixel data
+            currentFileOffset += code;
+
+            // Absolute Mode Padding: data must be aligned to a WORD (16-bit) boundary.
+            // If count is odd, there's an extra padding byte. Skip padding byte
+            if (code % 2 != 0) {
+              currentFileOffset++;
+            }
+            break;
+        }
+      }
+    }
+  }
+
+  /**
+   * Writes an encoded run to the output pixel array. In encoded mode, a single color index is
+   * repeated for the specified run length.
+   *
+   * @param pixels the 2D output pixel array
+   * @param runLength the number of pixels to write with the same color
+   * @param colourIndex the palette index for the color to use
+   * @param displayRowMapOffset row offset for display mapping
+   * @param displayRowMapMultiplier direction for row mapping (1 for top-down, -1 for bottom-up)
+   * @param currentX starting X coordinate
+   * @param currentY current Y coordinate
+   * @return the updated X coordinate after writing the run
+   */
+  private int writeBIRLE8EncodedRun(
+      int[][] pixels,
+      int runLength,
+      int displayRowMapOffset,
+      int displayRowMapMultiplier,
+      int currentX,
+      int currentY,
+      int colourIndex) {
+    int width = dibHeader.getWidth();
+    int displayHeight = Math.abs(dibHeader.getHeight());
+    int colour = colourPalette.getColour(colourIndex);
+    int row = displayRowMapOffset + currentY * displayRowMapMultiplier;
+
+    for (int i = 0; i < runLength; i++, currentX++) {
+      if (currentX >= 0
+          && currentX < width
+          && currentY >= 0
+          && currentY < displayHeight
+          && row >= 0
+          && row < displayHeight) {
+        pixels[row][currentX] = colour;
+      }
+    }
+    return currentX;
+  }
+
+  /**
+   * Writes an absolute run to the output pixel array. In absolute mode, each pixel index is
+   * explicitly specified in the data.
+   *
+   * @param pixels the 2D output pixel array
+   * @param count the number of explicit pixel indices to read and write
+   * @param displayRowMapOffset row offset for display mapping
+   * @param displayRowMapMultiplier direction for row mapping (1 for top-down, -1 for bottom-up)
+   * @param currentX starting X coordinate
+   * @param currentY current Y coordinate
+   * @param currentFileOffset offset into the data array where the pixel indices begin
+   * @return the updated X coordinate after writing the run
+   */
+  private int writeBIRLE8AbsoluteRun(
+      int[][] pixels,
+      int count,
+      int displayRowMapOffset,
+      int displayRowMapMultiplier,
+      int currentX,
+      int currentY,
+      int currentFileOffset) {
+    int width = dibHeader.getWidth();
+    int displayHeight = Math.abs(dibHeader.getHeight());
+    int row = displayRowMapOffset + (currentY * displayRowMapMultiplier);
+
+    for (int i = 0; i < count; i++, currentX++) {
+      if (currentX >= 0
+          && currentX < width
+          && currentY >= 0
+          && currentY < displayHeight
+          && row >= 0
+          && row < displayHeight) {
+        int pixelIndex = data[currentFileOffset + i] & 0xFF;
+        pixels[row][currentX] = colourPalette.getColour(pixelIndex);
+      }
+    }
+
+    return currentX;
+  }
+
+  /**
+   * Check that the next read does not exceed the pixel data size
+   *
+   * @param offset current cursor position
+   * @param needed number of bytes required
+   * @param message exception message to throw in case there are not enough bytes to satisfy read
+   */
+  private void ensureBytesAvailable(int offset, int needed, String message) {
+    if (offset + needed > data.length) {
+      throw new IllegalArgumentException(message);
     }
   }
 
@@ -817,9 +999,10 @@ public class BitmapParser implements IParser {
    */
   public int[][] getPixels() {
     int displayHeight = Math.abs(dibHeader.getHeight());
+    int width = dibHeader.getWidth();
     int compression = dibHeader.getCompression();
 
-    int[][] pixels;
+    int[][] pixels = new int[displayHeight][width];
 
     // Logical image row to which the current file row maps
     // For bottom-up, fileRow 0 maps to displayHeight-1. For top-down, fileRow 0 maps to 0.
@@ -828,12 +1011,14 @@ public class BitmapParser implements IParser {
 
     // Handle Compression
     if (compression == 0) {
-      pixels = readUncompressedPixels(displayRowMapMultiplier, displayRowMapOffset);
+      readUncompressedPixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
+    } else if (compression == 1) {
+      readRLE8Pixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
     } else if (compression == 3) {
-      pixels = readBitfieldPixels(displayRowMapMultiplier, displayRowMapOffset);
-    } else if (compression == 1 || compression == 2) {
+      readBitfieldPixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
+    } else if (compression == 2) {
       throw new UnsupportedOperationException(
-          "Run-Length Encoded (RLE) compression is not implemented yet.");
+          "Run-Length Encoded for 4bpp (BI_RLE4) compression is not implemented yet.");
     } else if (compression == 4 || compression == 5) {
       throw new UnsupportedOperationException(
           "JPEG or PNG embedded compression is not supported for direct pixel reading.");

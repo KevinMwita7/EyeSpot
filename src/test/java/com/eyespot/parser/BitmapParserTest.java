@@ -23,6 +23,10 @@ class BitmapParserTest {
 
   private static BitmapParser common8BitWithColourPaletteParser;
 
+  private static BitmapParser common8BitCompressedWithEncodedRunParser;
+
+  private static BitmapParser common8BitCompressedWithAbsoluteRunParser;
+
   private static BitmapParser common16BitParser;
 
   private static BitmapParser common32BitParser;
@@ -80,6 +84,22 @@ class BitmapParserTest {
     Assertions.assertNotNull(common8BitWithColourPaletteResource);
     common8BitWithColourPaletteParser =
         new BitmapParser(Paths.get(common8BitWithColourPaletteResource.toURI()));
+
+    // Parser for 8bpp BI_RLE8 compressed with encoded run and has BITMAPINFOHEADER
+    URL common8BitCompressedWithEncodedRunParserResource =
+        BitmapParserTest.class.getClassLoader().getResource("8bit_compressed.bmp");
+    Assertions.assertNotNull(common8BitCompressedWithEncodedRunParserResource);
+    common8BitCompressedWithEncodedRunParser =
+        new BitmapParser(Paths.get(common8BitCompressedWithEncodedRunParserResource.toURI()));
+
+    // Parser for 8bpp BI_RLE8 compressed with absolute run and has BITMAPINFOHEADER
+    URL common8BitCompressedWithAbsoluteRunParserResource =
+        BitmapParserTest.class
+            .getClassLoader()
+            .getResource("bmp_common_8bpp_rle8_with_delta_esc_codes.bmp");
+    Assertions.assertNotNull(common8BitCompressedWithAbsoluteRunParserResource);
+    common8BitCompressedWithAbsoluteRunParser =
+        new BitmapParser(Paths.get(common8BitCompressedWithAbsoluteRunParserResource.toURI()));
 
     // Parser for 16bpp bitmap with BITMAPINFOHEADER
     URL commonParser16BitResource =
@@ -479,6 +499,52 @@ class BitmapParserTest {
     Assertions.assertEquals(
         common32BitParser.getWidth() * common32BitParser.getHeight(), totalElements);
   }
+
+  // 8bpp BI_RLE8 compressed bitmap with encoded runs and BITMAPINFOHEADER
+  @Test
+  void Given8bppCompressedBitmapWithEncodedRun_GetCompression_Returns1() {
+    Assertions.assertEquals(1, common8BitCompressedWithEncodedRunParser.getCompression());
+  }
+
+  @Test
+  void Given8BppCompressedBitmapWithEncodedRun_GetPixels_ReturnAllPixels() {
+    int[][] pixels = common8BitCompressedWithEncodedRunParser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(
+        common8BitCompressedWithEncodedRunParser.getWidth()
+            * common8BitCompressedWithEncodedRunParser.getHeight(),
+        totalElements);
+  }
+
+  // 8bpp BI_RLE8 compressed bitmap with absolute runs and BITMAPINFOHEADER
+  @Test
+  void Given8bppCompressedBitmapWithAbsoluteRun_GetCompression_Returns1() {
+    Assertions.assertEquals(1, common8BitCompressedWithAbsoluteRunParser.getCompression());
+  }
+
+  @Test
+  void Given8BppCompressedBitmapWithAbsoluteRun_GetPixels_ReturnAllPixels() {
+    int[][] pixels = common8BitCompressedWithAbsoluteRunParser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(
+        common8BitCompressedWithAbsoluteRunParser.getWidth()
+            * common8BitCompressedWithAbsoluteRunParser.getHeight(),
+        totalElements);
+  }
+
+  // Malformed 8bpp BI_RLE8 compressed bitmap with absolute runs and BITMAPINFOHEADER
+  @Test
+  void GivenMalformed8BppCompressedBitmapWithAbsoluteRun_GetPixels_ThrowsIllegalArgumentException()
+      throws URISyntaxException, IOException {
+    URL resource =
+        BitmapParserTest.class
+            .getClassLoader()
+            .getResource("malformed_bmp_common_8bpp_rle8_with_delta.bmp");
+    Assertions.assertNotNull(resource);
+    BitmapParser parser = new BitmapParser(Paths.get(resource.toURI()));
+    Assertions.assertThrows(IllegalArgumentException.class, parser::getPixels);
+  }
+
   // Bitmap with BITMAPV2INFOHEADER tests
   @Test
   void GivenV2Bitmap_GetPixels_ReturnsAllPixels() {
@@ -790,7 +856,7 @@ class BitmapParserTest {
 
   // Compression tests
   @ParameterizedTest
-  @ValueSource(bytes = {1, 2, 4, 5, 6})
+  @ValueSource(bytes = {2, 4, 5, 6})
   void GivenUnsupportedCompression_GetPixels_ThrowsUnsupportedOperationException(byte i) {
     byte[] bytes = Arrays.copyOfRange(commonParser.getRawData(), 0, 55);
     bytes[30] = i;
