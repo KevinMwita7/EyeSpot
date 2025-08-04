@@ -243,8 +243,10 @@ class PictureTest {
 
   @Test
   void GivenPicture_WhenShowIsCalledMultipleTimes_ThenDoesNotThrow() {
+    System.setProperty("java.awt.headless", "true");
     Assertions.assertDoesNotThrow(() -> picture.show());
     Assertions.assertDoesNotThrow(() -> picture.show()); // call again
+    System.setProperty("java.awt.headless", "false");
   }
 
   @Test
