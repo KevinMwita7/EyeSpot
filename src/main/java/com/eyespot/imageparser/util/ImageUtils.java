@@ -1,6 +1,7 @@
 package com.eyespot.imageparser.util;
 
 import com.eyespot.imageparser.ImageType;
+import com.eyespot.imageparser.exception.CorruptedImageException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -86,5 +87,24 @@ public final class ImageUtils {
     return ByteBuffer.wrap(Arrays.copyOfRange(data, offset, offset + 2))
         .order(ByteOrder.LITTLE_ENDIAN)
         .getShort();
+  }
+
+  /**
+   * Check that the next read does not exceed the pixel data size
+   *
+   * @param offset current cursor position
+   * @param needed number of bytes required
+   * @param message exception message to throw in case there are not enough bytes to satisfy read
+   * @param isCorrupted determines if pixels processed so far should be returned
+   */
+  public static void ensureBytesAvailable(
+      int offset, int needed, String message, int length, boolean isCorrupted)
+      throws CorruptedImageException {
+    if (offset + needed > length) {
+      if (isCorrupted) {
+        throw new CorruptedImageException(message);
+      }
+      throw new IllegalArgumentException(message);
+    }
   }
 }

@@ -19,7 +19,7 @@ public abstract class DIBHeader {
   protected final int width;
   protected final int height;
   protected final short colourPlanes;
-  protected final short bitsPerPixel;
+  protected final int bitsPerPixel;
   protected final int compression;
   protected final int imageSize; // This should be the *actual* image size
   protected final int xResolution;
@@ -57,10 +57,11 @@ public abstract class DIBHeader {
     }
 
     // Parse BITMAPINFOHEADER and newer formats
-    this.width = readInt(data, headerOffset + BitmapConstants.BI_WIDTH_OFFSET);
+    this.width = Math.abs(readInt(data, headerOffset + BitmapConstants.BI_WIDTH_OFFSET));
     this.height = readInt(data, headerOffset + BitmapConstants.BI_HEIGHT_OFFSET);
     this.colourPlanes = readShort(data, headerOffset + BitmapConstants.BI_PLANES_OFFSET);
-    this.bitsPerPixel = readShort(data, headerOffset + BitmapConstants.BI_BITCOUNT_OFFSET);
+    this.bitsPerPixel =
+        Math.abs(readShort(data, headerOffset + BitmapConstants.BI_BITCOUNT_OFFSET));
     this.compression = readInt(data, headerOffset + BitmapConstants.BI_COMPRESSION_OFFSET);
 
     int rawImageSize = readInt(data, headerOffset + BitmapConstants.BI_SIZEIMAGE_OFFSET);
@@ -72,7 +73,7 @@ public abstract class DIBHeader {
 
     this.xResolution = readInt(data, headerOffset + BitmapConstants.BI_X_PELS_PER_METER_OFFSET);
     this.yResolution = readInt(data, headerOffset + BitmapConstants.BI_Y_PELS_PER_METER_OFFSET);
-    this.nColours = readInt(data, headerOffset + BitmapConstants.BI_CLR_USED_OFFSET);
+    this.nColours = Math.abs(readInt(data, headerOffset + BitmapConstants.BI_CLR_USED_OFFSET));
     this.importantColours = readInt(data, headerOffset + BitmapConstants.BI_CLR_IMPORTANT_OFFSET);
   }
 
@@ -135,7 +136,7 @@ public abstract class DIBHeader {
   }
 
   /** @return the number of bits per pixel */
-  public short getBitsPerPixel() {
+  public int getBitsPerPixel() {
     return bitsPerPixel;
   }
 

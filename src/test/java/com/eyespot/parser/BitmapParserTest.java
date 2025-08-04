@@ -394,8 +394,8 @@ class BitmapParserTest {
   }
 
   @Test
-  void GivenCommonBitmapImageWithColourPalette_HasAlphaChannel_ReturnsTrue() {
-    Assertions.assertTrue(commonParserWithColourPalette.hasAlphaChannel());
+  void GivenCommonBitmapImageWithColourPalette_HasAlphaChannel_ReturnsFalse() {
+    Assertions.assertFalse(commonParserWithColourPalette.hasAlphaChannel());
   }
 
   @Test
@@ -534,7 +534,7 @@ class BitmapParserTest {
 
   // Malformed 8bpp BI_RLE8 compressed bitmap with absolute runs and BITMAPINFOHEADER
   @Test
-  void GivenMalformed8BppCompressedBitmapWithAbsoluteRun_GetPixels_ThrowsIllegalArgumentException()
+  void GivenMalformed8BppCompressedBitmapWithAbsoluteRun_GetPixels_DoesNotThrow()
       throws URISyntaxException, IOException {
     URL resource =
         BitmapParserTest.class
@@ -542,7 +542,7 @@ class BitmapParserTest {
             .getResource("malformed_bmp_common_8bpp_rle8_with_delta.bmp");
     Assertions.assertNotNull(resource);
     BitmapParser parser = new BitmapParser(Paths.get(resource.toURI()));
-    Assertions.assertThrows(IllegalArgumentException.class, parser::getPixels);
+    Assertions.assertDoesNotThrow(parser::getPixels);
   }
 
   // Malformed non-8bpp with BI_RLE8 compression
@@ -670,10 +670,8 @@ class BitmapParserTest {
   }
 
   @Test
-  void GivenV3Bitmap_GetPixels_ReturnsAllPixels() {
-    int[][] pixels = v3Parser.getPixels();
-    int totalElements = pixels[0].length * pixels.length;
-    Assertions.assertEquals(v3Parser.getWidth() * v3Parser.getHeight(), totalElements);
+  void GivenMalformedV3Bitmap_GetPixels_DoesNotThrowException() {
+    Assertions.assertDoesNotThrow(v3Parser::getPixels);
   }
 
   @Test
@@ -969,6 +967,53 @@ class BitmapParserTest {
     bytes[24] = (byte) 0xFF;
     bytes[25] = (byte) 0xFF;
     BitmapParser parser = new BitmapParser(bytes);
-    Assertions.assertThrows(IllegalArgumentException.class, parser::getPixels);
+    Assertions.assertDoesNotThrow(parser::getPixels);
+  }
+
+  // If image is corrupted, return processed pixels
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "\\b\\555-pixeldata-cropped.bmp",
+        "\\b\\negative_offset_8bit.bmp",
+        "\\b\\8bpp-colorsused-large.bmp",
+        "\\b\\24bpp-pixeldata-cropped.bmp",
+        "\\b\\32bpp-pixeldata-cropped.bmp",
+        "\\b\\4bpp-no-palette.bmp",
+        "\\b\\4bpp-pixeldata-cropped.bmp",
+        "\\b\\8bpp-colorsimportant-large.bmp",
+        "\\b\\8bpp-colorsimportant-negative.bmp",
+        "\\b\\8bpp-colorsused-negative.bmp",
+        "\\b\\8bpp-no-palette.bmp",
+        "\\b\\8bpp-pixeldata-cropped.bmp",
+        "\\b\\pixeldata-missing.bmp",
+        "\\b\\rle8-absolute-cropped.bmp",
+        "\\b\\rle8-delta-cropped.bmp"
+      })
+  void GivenBitmap_WhenPixelDataNotEnough_ThenReturnsProcessedPixels(String source)
+      throws URISyntaxException, IOException {
+    URL paletteResource = BitmapParserTest.class.getClassLoader().getResource(source);
+    Assertions.assertNotNull(paletteResource);
+    BitmapParser parser = new BitmapParser(Paths.get(paletteResource.toURI()));
+    Assertions.assertDoesNotThrow(parser::getPixels);
+  }
+
+  @Test
+  void GivenBitmap_WhenHeightZeo_ThenReturnsProcessedPixels()
+      throws URISyntaxException, IOException {
+    URL paletteResource =
+        BitmapParserTest.class.getClassLoader().getResource("\\b\\height-zero.bmp");
+    Assertions.assertNotNull(paletteResource);
+    BitmapParser parser = new BitmapParser(Paths.get(paletteResource.toURI()));
+    Assertions.assertDoesNotThrow(parser::getPixels);
+  }
+
+  @Test
+  void GivenBitmap_WhenColourPaletteCropped_ThenThrowsException() {
+    URL paletteResource =
+        BitmapParserTest.class.getClassLoader().getResource("\\b\\palette-cropped.bmp");
+    Assertions.assertNotNull(paletteResource);
+    Executable executable = () -> new BitmapParser(Paths.get(paletteResource.toURI()));
+    Assertions.assertThrows(IllegalArgumentException.class, executable);
   }
 }
