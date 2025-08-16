@@ -1001,8 +1001,7 @@ class BitmapParserTest {
   @Test
   void GivenBitmap_WhenHeightZeo_ThenReturnsProcessedPixels()
       throws URISyntaxException, IOException {
-    URL paletteResource =
-        BitmapParserTest.class.getClassLoader().getResource("/b/height-zero.bmp");
+    URL paletteResource = BitmapParserTest.class.getClassLoader().getResource("/b/height-zero.bmp");
     Assertions.assertNotNull(paletteResource);
     BitmapParser parser = new BitmapParser(Paths.get(paletteResource.toURI()));
     Assertions.assertDoesNotThrow(parser::getPixels);
