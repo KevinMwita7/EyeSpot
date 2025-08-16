@@ -5,12 +5,15 @@ import static com.eyespot.imageparser.util.ImageUtils.readShort;
 
 import com.eyespot.imageparser.IParser;
 import com.eyespot.imageparser.ImageType;
+import com.eyespot.imageparser.exception.CorruptedImageException;
 import com.eyespot.imageparser.util.ImageUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * The {@code Parser} class implements the {@link IParser} interface and provides parsing
@@ -45,6 +48,8 @@ public class BitmapParser implements IParser {
 
   /** The bitmap colour palette, if present. */
   private final ColourPalette colourPalette;
+
+  private static final Logger LOGGER = Logger.getLogger(BitmapParser.class.getName());
 
   /**
    * Represents the {@code BITMAPFILEHEADER} structure (14 bytes). Contains basic metadata such as
@@ -107,15 +112,12 @@ public class BitmapParser implements IParser {
      * @param paletteStartFileOffset file offset where the palette begins
      */
     private ColourPalette(byte[] data, DIBHeader dibHeader, int paletteStartFileOffset) {
-      if (dibHeader.getBitsPerPixel() > 8) {
-        throw new IllegalArgumentException("Colour palette is not expected for bit depth > 8.");
-      }
-
       int numEntries;
-      // If the number of colours in the colour palette is 0, default to 2^n where n == bits per
-      // pixel
-      if (dibHeader.getNColours() == 0) {
-        numEntries = 1 << dibHeader.getBitsPerPixel(); // Max colours for bit depth
+      // If the number of colours in the colour palette is 0 or colours used > important colours,
+      // default to 2^n where n == bits per pixel
+      if (dibHeader.getNColours() == 0
+          || dibHeader.getNColours() > dibHeader.getImportantColours()) {
+        numEntries = 1 << dibHeader.getBitsPerPixel(); // Max colours for bit-depth
       } else {
         numEntries = dibHeader.getNColours();
       }
@@ -143,7 +145,7 @@ public class BitmapParser implements IParser {
         int entryOffset = paletteStartFileOffset + (i * bytesPerPaletteEntry);
 
         // Basic bounds check for reading from data array
-        if (entryOffset < 0 || entryOffset + bytesPerPaletteEntry > data.length) {
+        if (entryOffset + bytesPerPaletteEntry > data.length) {
           throw new IllegalArgumentException(
               String.format(
                   "Palette data truncated or out of bounds at entry %d (offset: %d)",
@@ -161,9 +163,11 @@ public class BitmapParser implements IParser {
 
         // Check alpha in bytes, if not explicitly stated in header
         if (bytesPerPaletteEntry == 4) {
-          alpha = data[entryOffset + 3] & 0xFF;
-          foundNonZeroReservedByte = alpha != 0xFF;
+          int parsedAlpha = data[entryOffset + 3] & 0xFF;
+          alpha = (parsedAlpha == 0) ? 0xFF : parsedAlpha;
         }
+
+        foundNonZeroReservedByte = alpha != 0xFF;
 
         // Store as ARGB (AARRGGBB)
         this.colours[i] = (alpha << 24) | (red << 16) | (green << 8) | blue;
@@ -218,7 +222,7 @@ public class BitmapParser implements IParser {
    *
    * <p>This constructor checks the first few bytes, commonly referred to as Magic Number, to
    * identify the image type. It also checks the image header to derive other image metadata such as
-   * size and offset.
+   * size and offset. f
    *
    * @param bytes the byte array representing image data
    * @throws IllegalArgumentException if the byte array does not represent a valid BMP image
@@ -257,7 +261,8 @@ public class BitmapParser implements IParser {
 
   /** Helper method to read uncompressed (BI_RGB) pixel data into the pixels array. */
   private void readUncompressedPixels(
-      int[][] pixels, int displayRowMapMultiplier, int displayRowMapOffset) {
+      int[][] pixels, int displayRowMapMultiplier, int displayRowMapOffset)
+      throws CorruptedImageException {
 
     int width = dibHeader.getWidth();
     int height = Math.abs(dibHeader.getHeight());
@@ -353,11 +358,8 @@ public class BitmapParser implements IParser {
    * @throws IllegalArgumentException if the computed file offset is out of bounds or if the
    *     extracted palette index is not valid
    */
-  private int getIndexedColourModePixelValue(int row, int cell, int scanlineByteSize) {
-    if (colourPalette == null) {
-      throw new IllegalStateException("Colour palette missing for indexed colour mode.");
-    }
-
+  private int getIndexedColourModePixelValue(int row, int cell, int scanlineByteSize)
+      throws CorruptedImageException {
     // Calculate the current row's offset in the file
     int currentScanlineFileOffset = header.getOffset() + (row * scanlineByteSize);
     int bitsPerPixel = dibHeader.getBitsPerPixel();
@@ -365,12 +367,12 @@ public class BitmapParser implements IParser {
     int currentPixelFileOffset = currentScanlineFileOffset + (cell * bitsPerPixel / 8);
 
     if (currentPixelFileOffset < 0 || currentPixelFileOffset >= data.length) {
-      throw new IllegalArgumentException(
+      throw new CorruptedImageException(
           "Pixel data offset out of bounds for indexed pixel at (" + cell + "," + row + ")");
     }
 
     int pixelIndex = getPixelIndex(currentPixelFileOffset, bitsPerPixel, cell);
-    if (pixelIndex < 0 || pixelIndex >= colourPalette.getNumberOfEntries()) {
+    if (pixelIndex >= colourPalette.getNumberOfEntries()) {
       throw new IllegalArgumentException(
           "Palette index " + pixelIndex + " out of bounds at pixel (" + cell + "," + row + ")");
     }
@@ -409,7 +411,8 @@ public class BitmapParser implements IParser {
    *     data
    * @throws UnsupportedOperationException if the bits-per-pixel value is unsupported
    */
-  private int getNonIndexedColourModePixelValue(int i, int x, int scanlineByteSize) {
+  private int getNonIndexedColourModePixelValue(int i, int x, int scanlineByteSize)
+      throws CorruptedImageException {
     // Calculate the current row's offset in the file
     int currentScanlineFileOffset = header.getOffset() + (i * scanlineByteSize);
 
@@ -417,27 +420,30 @@ public class BitmapParser implements IParser {
       case 16:
         {
           int currentPixelFileOffset = currentScanlineFileOffset + (x * 2);
-
-          if (currentPixelFileOffset < 0 || currentPixelFileOffset + 2 > data.length) {
-            throw new IllegalArgumentException(
-                "Pixel data offset out of bounds for 16bpp pixel at (" + x + "," + i + ")");
-          }
+          ImageUtils.ensureBytesAvailable(
+              currentPixelFileOffset,
+              2,
+              "Pixel data offset out of bounds for 16bpp pixel at (" + x + "," + i + ")",
+              data.length,
+              true);
           short pixelData = readShort(data, currentPixelFileOffset);
 
           // Convert 5-bit components to 8-bit.
-          int b = (pixelData & 0x001F) << 3;
-          int g = (pixelData & 0x03E0 >> 5) << 3;
-          int r = (pixelData & 0x7C00 >> 10) << 3;
+          int b = (pixelData & 0x001F) * 255 / 31;
+          int g = ((pixelData & 0x03E0) >> 5) * 255 / 31;
+          int r = ((pixelData & 0x7C00) >> 10) * 255 / 31;
 
           return (0xFF << 24) | (r << 16) | (g << 8) | b;
         }
       case 24:
         {
-          int currentPixelFileOffset = header.getOffset() + (x * 3);
-          if (currentPixelFileOffset < 0 || currentPixelFileOffset + 3 > data.length) {
-            throw new IllegalArgumentException(
-                "Pixel data offset out of bounds for 24bpp pixel at (" + x + "," + i + ")");
-          }
+          int currentPixelFileOffset = currentScanlineFileOffset + (x * 3);
+          ImageUtils.ensureBytesAvailable(
+              currentPixelFileOffset,
+              3,
+              "Pixel data offset out of bounds for 24bpp pixel at (" + x + "," + i + ")",
+              data.length,
+              true);
           int b = data[currentPixelFileOffset] & 0xFF;
           int g = data[currentPixelFileOffset + 1] & 0xFF;
           int r = data[currentPixelFileOffset + 2] & 0xFF;
@@ -445,10 +451,12 @@ public class BitmapParser implements IParser {
         }
       case 32:
         int currentPixelFileOffset = currentScanlineFileOffset + (x * 4);
-        if (currentPixelFileOffset < 0 || currentPixelFileOffset + 4 > data.length) {
-          throw new IllegalArgumentException(
-              "Pixel data offset out of bounds for 32bpp pixel at (" + x + "," + i + ")");
-        }
+        ImageUtils.ensureBytesAvailable(
+            currentPixelFileOffset,
+            4,
+            "Pixel data offset out of bounds for 32bpp pixel at (" + x + "," + i + ")",
+            data.length,
+            true);
         int b = data[currentPixelFileOffset] & 0xFF;
         int g = data[currentPixelFileOffset + 1] & 0xFF;
         int r = data[currentPixelFileOffset + 2] & 0xFF;
@@ -473,8 +481,7 @@ public class BitmapParser implements IParser {
    * BitmapV4Header}, and are extracted using {@link #extractMasks()}.
    *
    * <p>This method only supports 16bpp and 32bpp images. It dynamically chooses the appropriate
-   * pixel-reading method for each scanline (either {@code read16BppBitfieldPixels()} or {@code
-   * read32BppBitfieldPixels()}) depending on the bit depth.
+   * pixel-reading method for each scanline depending on the bit depth.
    *
    * <p>The scanline reading direction is flexible, allowing for bottom-up or top-down row ordering
    * via the {@code fileRowIndexStart}, {@code fileRowIndexEnd}, and {@code fileRowIncrement}
@@ -492,41 +499,7 @@ public class BitmapParser implements IParser {
     int fileRowIndexStart = 0;
     int fileRowIncrement = 1;
     int fileRowIndexEnd = Math.abs(dibHeader.getHeight());
-
     long[] masks = extractMasks();
-
-    for (int i = fileRowIndexStart; i != fileRowIndexEnd; i += fileRowIncrement) {
-      readBitfieldPixels16Or32Bpp(
-          pixels,
-          fileRowIndexStart,
-          fileRowIndexEnd,
-          fileRowIncrement,
-          displayRowMapMultiplier,
-          displayRowMapOffset,
-          masks);
-    }
-  }
-
-  /**
-   * Reads pixel data for 16bpp and 32bpp images using bitfield masks and stores ARGB values in the
-   * output array.
-   *
-   * @param pixels 2D array to store resulting ARGB pixel values
-   * @param fileRowIndexStart starting scanline index in the file
-   * @param fileRowIndexEnd exclusive ending scanline index
-   * @param fileRowIncrement step direction for reading scanlines (e.g. -1 for bottom-up)
-   * @param displayRowMapMultiplier multiplier to convert file row to display row
-   * @param displayRowMapOffset offset to convert file row to display row
-   * @param masks array of bitfield masks: [red, green, blue, alpha]
-   */
-  private void readBitfieldPixels16Or32Bpp(
-      int[][] pixels,
-      int fileRowIndexStart,
-      int fileRowIndexEnd,
-      int fileRowIncrement,
-      int displayRowMapMultiplier,
-      int displayRowMapOffset,
-      long[] masks) {
 
     int bitsPerPixel = dibHeader.getBitsPerPixel();
     int width = dibHeader.getWidth();
@@ -543,8 +516,8 @@ public class BitmapParser implements IParser {
     long blueMask = masks[2];
     long alphaMask = masks[3];
 
-    int leap = bitsPerPixel == 16 ? 2 : 4;
-    long unsignedShortMask = bitsPerPixel == 16 ? 0xFFFFL : 0xFFFFFFFFL;
+    int leap = bitsPerPixel / 8;
+    long unsignedShortMask = (1L << bitsPerPixel) - 1;
 
     for (int i = fileRowIndexStart; i != fileRowIndexEnd; i += fileRowIncrement) {
       int scanlineOffset = header.getOffset() + (i * scanlineByteSize);
@@ -553,14 +526,14 @@ public class BitmapParser implements IParser {
       for (int x = 0; x < width; x++) {
         int pixelOffset = scanlineOffset + (x * leap);
 
-        if (pixelOffset < 0 || pixelOffset + leap > data.length) {
+        if (pixelOffset + leap > data.length) {
           throw new IllegalArgumentException(
               String.format(
                   "Pixel data offset out of bounds for %d bitfield pixel at (%d, %d)",
                   bitsPerPixel, x, i));
         }
 
-        long pixelData = readShort(data, pixelOffset) & unsignedShortMask;
+        long pixelData = readBitfieldPixelData(pixelOffset, leap, x, i) & unsignedShortMask;
 
         int r = extractComponent(pixelData, redMask);
         int g = extractComponent(pixelData, greenMask);
@@ -570,6 +543,38 @@ public class BitmapParser implements IParser {
         pixels[displayRowIndex][x] = (a << 24) | (r << 16) | (g << 8) | b;
       }
     }
+  }
+
+  /**
+   * Reads a pixel's raw bitfield data from the bitmap byte array at the given offset.
+   *
+   * <p>This method supports both 16-bit and 32-bit pixels. The number of bytes to read (2 or 4) is
+   * determined by the {@code leap} parameter.
+   *
+   * @param offset the byte offset in the bitmap data where the pixel starts
+   * @param leap the number of bytes per pixel (typically 2 for 16bpp, 4 for 32bpp)
+   * @return the raw pixel data as an {@code int}; for 16bpp this will be a sign-extended short, for
+   *     32bpp it will be the full 4-byte integer
+   * @throws IllegalArgumentException if the bpp is not 16 or 32 or if offset is invalid
+   */
+  private int readBitfieldPixelData(int offset, int leap, int row, int col) {
+    int bitsPerPixel = dibHeader.getBitsPerPixel();
+
+    if (offset + leap > data.length) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Pixel data offset out of bounds for %d bitfield pixel at (%d, %d)",
+              bitsPerPixel, row, col));
+    }
+
+    if (bitsPerPixel != 16 && bitsPerPixel != 32) {
+      throw new IllegalArgumentException(
+          "BI_BITFIELDS compression is only valid for 16 or 32 bits per pixel.");
+    }
+    if (leap == 2) {
+      return readShort(data, offset);
+    }
+    return readInt(data, offset);
   }
 
   /**
@@ -583,8 +588,8 @@ public class BitmapParser implements IParser {
    * @throws IllegalArgumentException if the DIB header does not specify 8 bits per pixel, or if the
    *     data stream is malformed
    */
-  private void readRLE8Pixels(
-      int[][] pixels, int displayRowMapMultiplier, int displayRowMapOffset) {
+  private void readRLE8Pixels(int[][] pixels, int displayRowMapMultiplier, int displayRowMapOffset)
+      throws CorruptedImageException {
     if (dibHeader.getBitsPerPixel() != 8) {
       throw new IllegalArgumentException("BI_RLE8 compression is only valid for 8 bits per pixel.");
     }
@@ -599,14 +604,18 @@ public class BitmapParser implements IParser {
     // Loop through the compressed data until EOB
     while (currentFileOffset < data.length) {
       // Need at least 2 bytes for any command or encoded run
-      if (currentFileOffset + 1 > data.length) {
+      if (currentFileOffset + 1 >= data.length) {
         break;
       }
       int runLength = data[currentFileOffset++] & 0xFF;
 
       if (runLength != 0) {
-        ensureBytesAvailable(
-            currentFileOffset, 1, "RLE8 decoding error: Missing color index for encoded run.");
+        ImageUtils.ensureBytesAvailable(
+            currentFileOffset,
+            1,
+            "RLE8 decoding error: Missing color index for encoded run.",
+            data.length,
+            false);
         int colourIndex = data[currentFileOffset++] & 0xFF;
         currentX =
             writeBIRLE8EncodedRun(
@@ -618,8 +627,12 @@ public class BitmapParser implements IParser {
                 currentY,
                 colourIndex);
       } else {
-        ensureBytesAvailable(
-            currentFileOffset, 1, "RLE8 decoding error: Missing escape code parameter.");
+        ImageUtils.ensureBytesAvailable(
+            currentFileOffset,
+            1,
+            "RLE8 decoding error: Missing escape code parameter.",
+            data.length,
+            false);
         int code = data[currentFileOffset++] & 0xFF;
 
         switch (code) {
@@ -631,8 +644,12 @@ public class BitmapParser implements IParser {
           case endOfBitmap:
             return;
           case delta:
-            ensureBytesAvailable(
-                currentFileOffset, 2, "RLE8 decoding error: Missing delta offsets (x, y).");
+            ImageUtils.ensureBytesAvailable(
+                currentFileOffset,
+                2,
+                "RLE8 decoding error: Missing delta offsets (x, y).",
+                data.length,
+                true);
             int dx = data[currentFileOffset++] & 0xFF;
             int dy = data[currentFileOffset++] & 0xFF;
 
@@ -641,10 +658,12 @@ public class BitmapParser implements IParser {
             break;
             // Absolute Mode (byte2 is count > 2)
           default:
-            ensureBytesAvailable(
+            ImageUtils.ensureBytesAvailable(
                 currentFileOffset,
                 code,
-                "RLE8 decoding error: Not enough data for absolute run of " + code + " pixels.");
+                "RLE8 decoding error: Not enough data for absolute run of " + code + " pixels.",
+                data.length,
+                false);
             currentX =
                 writeBIRLE8AbsoluteRun(
                     pixels,
@@ -748,19 +767,6 @@ public class BitmapParser implements IParser {
   }
 
   /**
-   * Check that the next read does not exceed the pixel data size
-   *
-   * @param offset current cursor position
-   * @param needed number of bytes required
-   * @param message exception message to throw in case there are not enough bytes to satisfy read
-   */
-  private void ensureBytesAvailable(int offset, int needed, String message) {
-    if (offset + needed > data.length) {
-      throw new IllegalArgumentException(message);
-    }
-  }
-
-  /**
    * Extracts the colour channel bit masks (red, green, blue, alpha) from the DIB header.
    *
    * <p><b>Bitfields Compression (BI_BITFIELDS / BI_ALPHABITFIELDS):</b> In some bitmap formats,
@@ -792,6 +798,7 @@ public class BitmapParser implements IParser {
     long blueMask = 0;
     long alphaMask = 0;
 
+    // Handle both BitmapV4Header and BitmapV5Header
     if (dibHeader instanceof BitmapV4Header) {
       BitmapV4Header v4Header = (BitmapV4Header) dibHeader;
       redMask = v4Header.getRedMask() & 0xFFFFFFFFL;
@@ -800,6 +807,8 @@ public class BitmapParser implements IParser {
       alphaMask = v4Header.getAlphaMask() & 0xFFFFFFFFL;
     }
 
+    // Handle both BitmapV2InfoHeader and BitmapV3InfoHeader. No need
+    // to handle alpha masks since documentation does not indicate so
     if (dibHeader instanceof BitmapV2InfoHeader) {
       BitmapV2InfoHeader v2Header = (BitmapV2InfoHeader) dibHeader;
       redMask = v2Header.getRedMask();
@@ -807,23 +816,29 @@ public class BitmapParser implements IParser {
       blueMask = v2Header.getBlueMask();
     }
 
-    if (dibHeader instanceof BitmapV3InfoHeader) {
-      BitmapV3InfoHeader v3Header = (BitmapV3InfoHeader) dibHeader;
-      alphaMask = v3Header.getAlphaMask();
-    }
-
     // Fallback to common default masks if they were not explicitly found in headers
     if (redMask == 0 && greenMask == 0 && blueMask == 0) {
-      if (dibHeader.getBitsPerPixel() == 16) {
-        redMask = 0xF800;
-        greenMask = 0x07E0;
-        blueMask = 0x001F;
+      int bpp = dibHeader.getBitsPerPixel();
+      if (bpp == 16) {
+        if (getCompression() == 3
+            && data.length
+                >= BitmapConstants.FILE_HEADER_SIZE
+                    + BitmapConstants.BITMAPINFOHEADER_SIZE
+                    + BitmapConstants.BI_PLANES_OFFSET) {
+          redMask = readInt(data, 54);
+          greenMask = readInt(data, 58);
+          blueMask = readInt(data, 62);
+        } else {
+          redMask = 0xF800;
+          greenMask = 0x07E0;
+          blueMask = 0x001F;
+        }
         alphaMask = 0x0000;
-      } else {
+      } else if (bpp == 32) {
         redMask = 0x00FF0000;
         greenMask = 0x0000FF00;
         blueMask = 0x000000FF;
-        alphaMask = 0xFF000000L;
+        alphaMask = InfoHeaderType.BITMAPINFOHEADER.equals(getDibHeaderType()) ? 0 : 0xFF000000L;
       }
     }
 
@@ -841,27 +856,19 @@ public class BitmapParser implements IParser {
     }
 
     long maskedValue = pixelData & mask;
-    int shift = 0;
-
-    while (((mask >> shift) & 1) == 0) {
-      shift++;
-    }
+    int shift = Long.numberOfTrailingZeros(mask);
 
     int component = (int) (maskedValue >> shift);
 
     // Scale component to 0-255 range if its bit depth is less than 8.
     // For example, a 5-bit component (0-31) needs to be scaled to 0-255.
     int bitsInComponent = Long.bitCount(mask);
-    if (bitsInComponent > 0 && bitsInComponent < 8) {
-      // Formula for scaling N-bit value to 8-bit (0-255): value * 255 / max_val_for_N_bit
-      int maxComponentValue = (1 << bitsInComponent) - 1;
-      if (maxComponentValue > 0) {
-        component = component * 255 / maxComponentValue;
-      } else {
-        component = component > 0 ? 255 : 0;
-      }
+    if (bitsInComponent < 8) {
+      return (int) (component * 255.0f / ((1 << bitsInComponent) - 1) + 0.5f);
+    } else if (bitsInComponent > 8) {
+      return component >> (bitsInComponent - 8);
     }
-    return component & 0xFF;
+    return component;
   }
 
   /** @return the {@link ImageType} for this parser (always {@code BITMAP}) */
@@ -883,6 +890,7 @@ public class BitmapParser implements IParser {
   }
 
   /** @return a defensive copy of the raw image data */
+  @Override
   public byte[] getRawData() {
     return Arrays.copyOf(data, data.length);
   }
@@ -894,46 +902,55 @@ public class BitmapParser implements IParser {
   }
 
   /** @return image width in pixels */
+  @Override
   public int getWidth() {
     return dibHeader.getWidth();
   }
 
   /** @return image height in pixels */
+  @Override
   public int getHeight() {
-    return dibHeader.getHeight();
+    return Math.abs(dibHeader.getHeight());
   }
 
   /** @return number of bits per pixel */
-  public short getBitsPerPixel() {
+  @Override
+  public int getBitsPerPixel() {
     return dibHeader.getBitsPerPixel();
   }
 
   /** @return compression method (e.g., BI_RGB, BI_RLE8) */
+  @Override
   public int getCompression() {
     return dibHeader.getCompression();
   }
 
   /** @return size of bitmap pixel data in bytes */
+  @Override
   public int getImageDataSize() {
     return dibHeader.getImageDataSize();
   }
 
   /** @return number of colours used in the palette */
+  @Override
   public int getNColours() {
     return dibHeader.getNColours();
   }
 
   /** @return number of important colours specified in the header */
+  @Override
   public int getImportantColours() {
     return dibHeader.getImportantColours();
   }
 
   /** @return horizontal resolution in pixels per meter */
+  @Override
   public int getXResolution() {
     return dibHeader.getXResolution();
   }
 
   /** @return vertical resolution in pixels per meter */
+  @Override
   public int getYResolution() {
     return dibHeader.getYResolution();
   }
@@ -944,6 +961,7 @@ public class BitmapParser implements IParser {
    * @return the alpha bitmask
    * @throws UnsupportedOperationException if alpha mask is not defined for this header type
    */
+  @Override
   public long getAlphaMask() {
     if (InfoHeaderType.BITMAPV3INFOHEADER.equals(dibHeader.getType())) {
       return ((BitmapV3InfoHeader) dibHeader).getAlphaMask();
@@ -963,6 +981,7 @@ public class BitmapParser implements IParser {
    * @return ICC profile size for BITMAPV5HEADER
    * @throws UnsupportedOperationException if not a V5 header
    */
+  @Override
   public int getProfileSize() {
     if (dibHeader instanceof BitmapV5Header) {
       return ((BitmapV5Header) dibHeader).getProfileSize();
@@ -972,18 +991,39 @@ public class BitmapParser implements IParser {
   }
 
   /** @return size of the DIB header in bytes */
+  @Override
   public int getHeaderSize() {
     return dibHeader.getHeaderSize();
   }
 
   /** @return true if a colour palette is present (typically for ≤ 8 bpp images) */
+  @Override
   public boolean hasColourPalette() {
     return dibHeader.getBitsPerPixel() <= 8; // Typically for 1, 4, or 8 bpp
   }
 
   /** @return true if alpha channel is present in the colour palette and false otherwise */
+  @Override
   public boolean hasAlphaChannel() {
-    return Objects.requireNonNull(colourPalette).hasAlphaChannel();
+    if (colourPalette != null) {
+      return colourPalette.hasAlphaChannel();
+    }
+
+    int width = dibHeader.getWidth();
+    int height = Math.abs(dibHeader.getHeight());
+    int offset = header.getOffset();
+
+    for (int col = 0; col < width; col++) {
+      for (int row = 0; row < height; row++) {
+        int argb = data[col * row + offset];
+        int alpha = (argb >> 24) & 0xFF;
+        if (alpha != 255) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -997,6 +1037,7 @@ public class BitmapParser implements IParser {
    * @throws UnsupportedOperationException If the specific bit depth or compression is not
    *     implemented.
    */
+  @Override
   public int[][] getPixels() {
     int displayHeight = Math.abs(dibHeader.getHeight());
     int width = dibHeader.getWidth();
@@ -1010,20 +1051,24 @@ public class BitmapParser implements IParser {
     int displayRowMapOffset = dibHeader.getHeight() > 0 ? displayHeight - 1 : 0;
 
     // Handle Compression
-    if (compression == 0) {
-      readUncompressedPixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
-    } else if (compression == 1) {
-      readRLE8Pixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
-    } else if (compression == 3) {
-      readBitfieldPixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
-    } else if (compression == 2) {
-      throw new UnsupportedOperationException(
-          "Run-Length Encoded for 4bpp (BI_RLE4) compression is not implemented yet.");
-    } else if (compression == 4 || compression == 5) {
-      throw new UnsupportedOperationException(
-          "JPEG or PNG embedded compression is not supported for direct pixel reading.");
-    } else {
-      throw new UnsupportedOperationException("Unsupported BMP compression type: " + compression);
+    try {
+      if (compression == 0) {
+        readUncompressedPixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
+      } else if (compression == 1) {
+        readRLE8Pixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
+      } else if (compression == 3) {
+        readBitfieldPixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
+      } else if (compression == 2) {
+        throw new UnsupportedOperationException(
+            "Run-Length Encoded for 4bpp (BI_RLE4) compression is not implemented yet.");
+      } else if (compression == 4 || compression == 5) {
+        throw new UnsupportedOperationException(
+            "JPEG or PNG embedded compression is not supported for direct pixel reading.");
+      } else {
+        throw new UnsupportedOperationException("Unsupported BMP compression type: " + compression);
+      }
+    } catch (CorruptedImageException e) {
+      LOGGER.log(Level.SEVERE, e::getMessage);
     }
 
     return pixels;

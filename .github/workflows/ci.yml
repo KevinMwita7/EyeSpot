@@ -19,12 +19,14 @@ jobs:
         java-version: '11'
         distribution: 'temurin'
         cache: maven
+    - name: Install Xvfb
+      run: sudo apt-get install -y xvfb
 
     - name: Build with Maven
-      run: mvn -B package --file pom.xml
+      run: xvfb-run -a mvn -B package --file pom.xml
 
     - name: Run Unit Tests with Coverage
-      run: mvn test jacoco:report
+      run: xvfb-run -a mvn test jacoco:report
 
     - name: Publish Coverage
       uses: coverallsapp/github-action@v2

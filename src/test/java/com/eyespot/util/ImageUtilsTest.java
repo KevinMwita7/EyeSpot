@@ -63,4 +63,15 @@ class ImageUtilsTest {
     byte[] bytes = {0x42, 0x34};
     Assertions.assertEquals(ImageType.UNDETERMINED, ImageUtils.detectType(bytes));
   }
+
+  @Test
+  void GivenBytes_WhenHasEnoughBytesForNextRead_ThenDoesNotThrow() {
+    Assertions.assertDoesNotThrow(() -> ImageUtils.ensureBytesAvailable(0, 4, "", 4, false));
+  }
+
+  @Test
+  void GivenBytes_WhenNotEnoughBytesForNextRead_ThenThrows() {
+    Assertions.assertThrows(
+        IllegalArgumentException.class, () -> ImageUtils.ensureBytesAvailable(0, 4, "", 3, false));
+  }
 }
