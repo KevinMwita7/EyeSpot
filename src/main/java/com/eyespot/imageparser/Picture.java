@@ -36,7 +36,6 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.imageio.ImageIO;
@@ -609,10 +608,5 @@ public class Picture implements ActionListener {
         LOGGER.log(Level.SEVERE, e::getMessage);
       }
     }
-  }
-
-  public static void main(String[] args) throws IOException {
-    Picture picture = new Picture(Paths.get(args[0]));
-    picture.show();
   }
 }
