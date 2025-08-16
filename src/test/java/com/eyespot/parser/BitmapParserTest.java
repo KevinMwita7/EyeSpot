@@ -974,21 +974,21 @@ class BitmapParserTest {
   @ParameterizedTest
   @ValueSource(
       strings = {
-        "\\b\\555-pixeldata-cropped.bmp",
-        "\\b\\negative_offset_8bit.bmp",
-        "\\b\\8bpp-colorsused-large.bmp",
-        "\\b\\24bpp-pixeldata-cropped.bmp",
-        "\\b\\32bpp-pixeldata-cropped.bmp",
-        "\\b\\4bpp-no-palette.bmp",
-        "\\b\\4bpp-pixeldata-cropped.bmp",
-        "\\b\\8bpp-colorsimportant-large.bmp",
-        "\\b\\8bpp-colorsimportant-negative.bmp",
-        "\\b\\8bpp-colorsused-negative.bmp",
-        "\\b\\8bpp-no-palette.bmp",
-        "\\b\\8bpp-pixeldata-cropped.bmp",
-        "\\b\\pixeldata-missing.bmp",
-        "\\b\\rle8-absolute-cropped.bmp",
-        "\\b\\rle8-delta-cropped.bmp"
+        ".\\b\\555-pixeldata-cropped.bmp",
+        ".\\b\\negative_offset_8bit.bmp",
+        ".\\b\\8bpp-colorsused-large.bmp",
+        ".\\b\\24bpp-pixeldata-cropped.bmp",
+        ".\\b\\32bpp-pixeldata-cropped.bmp",
+        ".\\b\\4bpp-no-palette.bmp",
+        ".\\b\\4bpp-pixeldata-cropped.bmp",
+        ".\\b\\8bpp-colorsimportant-large.bmp",
+        ".\\b\\8bpp-colorsimportant-negative.bmp",
+        ".\\b\\8bpp-colorsused-negative.bmp",
+        ".\\b\\8bpp-no-palette.bmp",
+        ".\\b\\8bpp-pixeldata-cropped.bmp",
+        ".\\b\\pixeldata-missing.bmp",
+        ".\\b\\rle8-absolute-cropped.bmp",
+        ".\\b\\rle8-delta-cropped.bmp"
       })
   void GivenBitmap_WhenPixelDataNotEnough_ThenReturnsProcessedPixels(String source)
       throws URISyntaxException, IOException {
