@@ -999,9 +999,9 @@ class BitmapParserTest {
   }
 
   @Test
-  void GivenBitmap_WhenHeightZeo_ThenReturnsProcessedPixels()
+  void GivenBitmap_WhenHeightZero_ThenReturnsProcessedPixels()
       throws URISyntaxException, IOException {
-    URL paletteResource = BitmapParserTest.class.getClassLoader().getResource("/b/height-zero.bmp");
+    URL paletteResource = BitmapParserTest.class.getClassLoader().getResource("./b/height-zero.bmp");
     Assertions.assertNotNull(paletteResource);
     BitmapParser parser = new BitmapParser(Paths.get(paletteResource.toURI()));
     Assertions.assertDoesNotThrow(parser::getPixels);
@@ -1010,7 +1010,7 @@ class BitmapParserTest {
   @Test
   void GivenBitmap_WhenColourPaletteCropped_ThenThrowsException() {
     URL paletteResource =
-        BitmapParserTest.class.getClassLoader().getResource("/b/palette-cropped.bmp");
+        BitmapParserTest.class.getClassLoader().getResource("./b/palette-cropped.bmp");
     Assertions.assertNotNull(paletteResource);
     Executable executable = () -> new BitmapParser(Paths.get(paletteResource.toURI()));
     Assertions.assertThrows(IllegalArgumentException.class, executable);
