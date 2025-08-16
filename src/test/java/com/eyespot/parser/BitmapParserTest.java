@@ -974,21 +974,21 @@ class BitmapParserTest {
   @ParameterizedTest
   @ValueSource(
       strings = {
-        ".\\b\\555-pixeldata-cropped.bmp",
-        ".\\b\\negative_offset_8bit.bmp",
-        ".\\b\\8bpp-colorsused-large.bmp",
-        ".\\b\\24bpp-pixeldata-cropped.bmp",
-        ".\\b\\32bpp-pixeldata-cropped.bmp",
-        ".\\b\\4bpp-no-palette.bmp",
-        ".\\b\\4bpp-pixeldata-cropped.bmp",
-        ".\\b\\8bpp-colorsimportant-large.bmp",
-        ".\\b\\8bpp-colorsimportant-negative.bmp",
-        ".\\b\\8bpp-colorsused-negative.bmp",
-        ".\\b\\8bpp-no-palette.bmp",
-        ".\\b\\8bpp-pixeldata-cropped.bmp",
-        ".\\b\\pixeldata-missing.bmp",
-        ".\\b\\rle8-absolute-cropped.bmp",
-        ".\\b\\rle8-delta-cropped.bmp"
+        "./b/555-pixeldata-cropped.bmp",
+        "./b/negative_offset_8bit.bmp",
+        "./b/8bpp-colorsused-large.bmp",
+        "./b/24bpp-pixeldata-cropped.bmp",
+        "./b/32bpp-pixeldata-cropped.bmp",
+        "./b/4bpp-no-palette.bmp",
+        "./b/4bpp-pixeldata-cropped.bmp",
+        "./b/8bpp-colorsimportant-large.bmp",
+        "./b/8bpp-colorsimportant-negative.bmp",
+        "./b/8bpp-colorsused-negative.bmp",
+        "./b/8bpp-no-palette.bmp",
+        "./b/8bpp-pixeldata-cropped.bmp",
+        "./b/pixeldata-missing.bmp",
+        "./b/rle8-absolute-cropped.bmp",
+        "./b/rle8-delta-cropped.bmp"
       })
   void GivenBitmap_WhenPixelDataNotEnough_ThenReturnsProcessedPixels(String source)
       throws URISyntaxException, IOException {
@@ -1002,7 +1002,7 @@ class BitmapParserTest {
   void GivenBitmap_WhenHeightZeo_ThenReturnsProcessedPixels()
       throws URISyntaxException, IOException {
     URL paletteResource =
-        BitmapParserTest.class.getClassLoader().getResource("\\b\\height-zero.bmp");
+        BitmapParserTest.class.getClassLoader().getResource("/b/height-zero.bmp");
     Assertions.assertNotNull(paletteResource);
     BitmapParser parser = new BitmapParser(Paths.get(paletteResource.toURI()));
     Assertions.assertDoesNotThrow(parser::getPixels);
@@ -1011,7 +1011,7 @@ class BitmapParserTest {
   @Test
   void GivenBitmap_WhenColourPaletteCropped_ThenThrowsException() {
     URL paletteResource =
-        BitmapParserTest.class.getClassLoader().getResource("\\b\\palette-cropped.bmp");
+        BitmapParserTest.class.getClassLoader().getResource("/b/palette-cropped.bmp");
     Assertions.assertNotNull(paletteResource);
     Executable executable = () -> new BitmapParser(Paths.get(paletteResource.toURI()));
     Assertions.assertThrows(IllegalArgumentException.class, executable);
