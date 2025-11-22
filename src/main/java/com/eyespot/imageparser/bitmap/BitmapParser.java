@@ -688,6 +688,20 @@ public class BitmapParser implements IParser {
   }
 
   /**
+   * Helper method to check if a pixel is within valid bounds.
+   *
+   * @param x the X coordinate
+   * @param y the Y coordinate
+   * @param row the display row index
+   * @param width the image width
+   * @param displayHeight the image height
+   * @return true if the pixel is within bounds
+   */
+  private boolean isPixelInBounds(int x, int y, int row, int width, int displayHeight) {
+    return x >= 0 && x < width && y >= 0 && y < displayHeight && row >= 0 && row < displayHeight;
+  }
+
+  /**
    * Writes an encoded run to the output pixel array. In encoded mode, a single color index is
    * repeated for the specified run length.
    *
@@ -714,12 +728,7 @@ public class BitmapParser implements IParser {
     int row = displayRowMapOffset + currentY * displayRowMapMultiplier;
 
     for (int i = 0; i < runLength; i++, currentX++) {
-      if (currentX >= 0
-          && currentX < width
-          && currentY >= 0
-          && currentY < displayHeight
-          && row >= 0
-          && row < displayHeight) {
+      if (isPixelInBounds(currentX, currentY, row, width, displayHeight)) {
         pixels[row][currentX] = colour;
       }
     }
@@ -752,12 +761,7 @@ public class BitmapParser implements IParser {
     int row = displayRowMapOffset + (currentY * displayRowMapMultiplier);
 
     for (int i = 0; i < count; i++, currentX++) {
-      if (currentX >= 0
-          && currentX < width
-          && currentY >= 0
-          && currentY < displayHeight
-          && row >= 0
-          && row < displayHeight) {
+      if (isPixelInBounds(currentX, currentY, row, width, displayHeight)) {
         int pixelIndex = data[currentFileOffset + i] & 0xFF;
         pixels[row][currentX] = colourPalette.getColour(pixelIndex);
       }
@@ -871,7 +875,7 @@ public class BitmapParser implements IParser {
     int row = displayRowMapOffset + y * displayRowMapMultiplier;
 
     for (int i = 0; i < runLength; i++) {
-      if (x >= 0 && x < width && y >= 0 && y < displayHeight && row >= 0 && row < displayHeight) {
+      if (isPixelInBounds(x, y, row, width, displayHeight)) {
         int color =
             (i % 2 == 0)
                 ? colourPalette.getColour(colorIndex1)
@@ -898,7 +902,7 @@ public class BitmapParser implements IParser {
     int currentByte = 0;
 
     for (int i = 0; i < numPixels; i++) {
-      if (x >= 0 && x < width && y >= 0 && y < displayHeight && row >= 0 && row < displayHeight) {
+      if (isPixelInBounds(x, y, row, width, displayHeight)) {
         if (i % 2 == 0) {
           currentByte = data[fileOffset + i / 2] & 0xFF;
           int colorIndex = (currentByte >> 4) & 0x0F;
