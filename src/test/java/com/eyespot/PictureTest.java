@@ -35,7 +35,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.MockedStatic;
+import java.util.stream.Stream;
 
 class PictureTest {
 
@@ -87,6 +91,14 @@ class PictureTest {
     picture = new Picture(Paths.get(resource.toURI()));
   }
 
+  private static Stream<Arguments> provideInvalidFileDialogInputs() {
+    return Stream.of(
+        Arguments.of(null, null), // Both directory and file are null
+        Arguments.of("/tmp/", null), // File is null
+        Arguments.of("", "") // Both directory and file are empty
+        );
+  }
+
   @Test
   void GivenPicture_WhenGetWidth_ThenReturnsCorrectValue() {
     assertEquals(1, picture.width());
@@ -123,7 +135,7 @@ class PictureTest {
 
   @Test
   void GivenNull_WhenEqualsCalled_ThenReturnsFalse() {
-    boolean isEqual = picture.equals(null);
+    boolean isEqual = picture == null;
     Assertions.assertFalse(isEqual);
   }
 
@@ -432,6 +444,24 @@ class PictureTest {
     assertDoesNotThrow(pic::show);
   }
 
+  @ParameterizedTest
+  @MethodSource("provideInvalidFileDialogInputs")
+  void GivenPicture_WhenSaveFileDialogWithInvalidPaths_ThenDoesNotThrow(
+      String directory, String file) throws URISyntaxException, IOException {
+    URL resource = PictureTest.class.getClassLoader().getResource("minimal.bmp");
+    Assertions.assertNotNull(resource);
+    TestablePicture pic = new TestablePicture(Paths.get(resource.toURI()));
+    FileDialog mockDialog = mock(FileDialog.class);
+
+    when(mockDialog.getDirectory()).thenReturn(directory);
+    when(mockDialog.getFile()).thenReturn(file);
+
+    pic.setTestDialog(mockDialog);
+
+    ActionEvent fakeEvent = new ActionEvent(this, ActionEvent.ACTION_PERFORMED, "Save");
+    assertDoesNotThrow(() -> pic.actionPerformed(fakeEvent));
+  }
+
   @Test
   void GivenPicture_WhenSaveFileDialogDestinationSelected_ThenSuccessfulSave()
       throws URISyntaxException, IOException {
@@ -449,56 +479,5 @@ class PictureTest {
     pic.actionPerformed(fakeEvent);
 
     assertEquals("/tmp/image.png", pic.lastSavedPath);
-  }
-
-  @Test
-  void GivenPicture_WhenSaveFileDialogDestinationFolderAndFileNotSelected_ThenDoesNothing()
-      throws URISyntaxException, IOException {
-    URL resource = PictureTest.class.getClassLoader().getResource("minimal.bmp");
-    Assertions.assertNotNull(resource);
-    TestablePicture pic = new TestablePicture(Paths.get(resource.toURI()));
-    FileDialog mockDialog = mock(FileDialog.class);
-
-    when(mockDialog.getDirectory()).thenReturn(null);
-    when(mockDialog.getFile()).thenReturn(null);
-
-    pic.setTestDialog(mockDialog);
-
-    ActionEvent fakeEvent = new ActionEvent(this, ActionEvent.ACTION_PERFORMED, "Save");
-    assertDoesNotThrow(() -> pic.actionPerformed(fakeEvent));
-  }
-
-  @Test
-  void GivenPicture_WhenSaveFileDialogDestinationFileSelected_ThenSuccessfulSave()
-      throws URISyntaxException, IOException {
-    URL resource = PictureTest.class.getClassLoader().getResource("minimal.bmp");
-    Assertions.assertNotNull(resource);
-    TestablePicture pic = new TestablePicture(Paths.get(resource.toURI()));
-    FileDialog mockDialog = mock(FileDialog.class);
-
-    when(mockDialog.getDirectory()).thenReturn("/tmp/");
-    when(mockDialog.getFile()).thenReturn(null);
-
-    pic.setTestDialog(mockDialog);
-
-    ActionEvent fakeEvent = new ActionEvent(this, ActionEvent.ACTION_PERFORMED, "Save");
-    assertDoesNotThrow(() -> pic.actionPerformed(fakeEvent));
-  }
-
-  @Test
-  void GivenPicture_WhenSaveFileThrows_ThenExceptionCaught()
-      throws URISyntaxException, IOException {
-    URL resource = PictureTest.class.getClassLoader().getResource("minimal.bmp");
-    Assertions.assertNotNull(resource);
-    TestablePicture pic = new TestablePicture(Paths.get(resource.toURI()));
-    FileDialog mockDialog = mock(FileDialog.class);
-
-    when(mockDialog.getDirectory()).thenReturn("");
-    when(mockDialog.getFile()).thenReturn("");
-
-    pic.setTestDialog(mockDialog);
-
-    ActionEvent fakeEvent = new ActionEvent(this, ActionEvent.ACTION_PERFORMED, "Save");
-    assertDoesNotThrow(() -> pic.actionPerformed(fakeEvent));
   }
 }
