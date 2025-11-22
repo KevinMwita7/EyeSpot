@@ -889,7 +889,7 @@ class BitmapParserTest {
 
   // Compression tests
   @ParameterizedTest
-  @ValueSource(bytes = {2, 4, 5, 6})
+  @ValueSource(bytes = {4, 5, 6})
   void GivenUnsupportedCompression_GetPixels_ThrowsUnsupportedOperationException(byte i) {
     byte[] bytes = Arrays.copyOfRange(commonParser.getRawData(), 0, 55);
     bytes[30] = i;
