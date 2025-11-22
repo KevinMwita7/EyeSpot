@@ -766,6 +766,153 @@ public class BitmapParser implements IParser {
     return currentX;
   }
 
+  private void readRLE4Pixels(int[][] pixels, int displayRowMapMultiplier, int displayRowMapOffset)
+      throws CorruptedImageException {
+    if (dibHeader.getBitsPerPixel() != 4) {
+      throw new IllegalArgumentException("BI_RLE4 compression is only valid for 4 bits per pixel.");
+    }
+
+    int currentFileOffset = header.getOffset();
+    int currentX = 0;
+    int currentY = 0;
+    final int endOfLine = 0x00;
+    final int endOfBitmap = 0x01;
+    final int delta = 0x02;
+
+    while (currentFileOffset < data.length) {
+      if (currentFileOffset + 1 >= data.length) {
+        break;
+      }
+      int firstByte = data[currentFileOffset++] & 0xFF;
+      int secondByte = data[currentFileOffset++] & 0xFF;
+
+      if (firstByte != 0) { // Encoded mode
+        int runLength = firstByte;
+        int colorIndex1 = (secondByte >> 4) & 0x0F;
+        int colorIndex2 = secondByte & 0x0F;
+
+        currentX =
+            writeBIRLE4EncodedRun(
+                pixels,
+                runLength,
+                displayRowMapOffset,
+                displayRowMapMultiplier,
+                currentX,
+                currentY,
+                colorIndex1,
+                colorIndex2);
+
+      } else { // Escape mode
+        int code = secondByte;
+        switch (code) {
+          case endOfLine:
+            currentX = 0;
+            currentY++;
+            break;
+          case endOfBitmap:
+            return;
+          case delta:
+            ImageUtils.ensureBytesAvailable(
+                currentFileOffset,
+                2,
+                "RLE4 decoding error: Missing delta offsets (x, y).",
+                data.length,
+                true);
+            int dx = data[currentFileOffset++] & 0xFF;
+            int dy = data[currentFileOffset++] & 0xFF;
+            currentX += dx;
+            currentY += dy;
+            break;
+          default: // Absolute mode
+            int numPixels = code;
+            ImageUtils.ensureBytesAvailable(
+                currentFileOffset,
+                (numPixels + 1) / 2,
+                "RLE4 decoding error: Not enough data for absolute run of "
+                    + numPixels
+                    + " pixels.",
+                data.length,
+                false);
+
+            currentX =
+                writeBIRLE4AbsoluteRun(
+                    pixels,
+                    numPixels,
+                    displayRowMapOffset,
+                    displayRowMapMultiplier,
+                    currentX,
+                    currentY,
+                    currentFileOffset);
+
+            currentFileOffset += (numPixels + 1) / 2;
+
+            // Padding to WORD boundary
+            if ((((numPixels + 1) / 2) % 2) != 0) {
+              currentFileOffset++;
+            }
+            break;
+        }
+      }
+    }
+  }
+
+  private int writeBIRLE4EncodedRun(
+      int[][] pixels,
+      int runLength,
+      int displayRowMapOffset,
+      int displayRowMapMultiplier,
+      int startX,
+      int y,
+      int colorIndex1,
+      int colorIndex2) {
+    int x = startX;
+    int width = dibHeader.getWidth();
+    int displayHeight = Math.abs(dibHeader.getHeight());
+    int row = displayRowMapOffset + y * displayRowMapMultiplier;
+
+    for (int i = 0; i < runLength; i++) {
+      if (x >= 0 && x < width && y >= 0 && y < displayHeight && row >= 0 && row < displayHeight) {
+        int color =
+            (i % 2 == 0)
+                ? colourPalette.getColour(colorIndex1)
+                : colourPalette.getColour(colorIndex2);
+        pixels[row][x] = color;
+      }
+      x++;
+    }
+    return x;
+  }
+
+  private int writeBIRLE4AbsoluteRun(
+      int[][] pixels,
+      int numPixels,
+      int displayRowMapOffset,
+      int displayRowMapMultiplier,
+      int startX,
+      int y,
+      int fileOffset) {
+    int x = startX;
+    int width = dibHeader.getWidth();
+    int displayHeight = Math.abs(dibHeader.getHeight());
+    int row = displayRowMapOffset + (y * displayRowMapMultiplier);
+    int currentByte = 0;
+
+    for (int i = 0; i < numPixels; i++) {
+      if (x >= 0 && x < width && y >= 0 && y < displayHeight && row >= 0 && row < displayHeight) {
+        if (i % 2 == 0) {
+          currentByte = data[fileOffset + i / 2] & 0xFF;
+          int colorIndex = (currentByte >> 4) & 0x0F;
+          pixels[row][x] = colourPalette.getColour(colorIndex);
+        } else {
+          int colorIndex = currentByte & 0x0F;
+          pixels[row][x] = colourPalette.getColour(colorIndex);
+        }
+      }
+      x++;
+    }
+    return x;
+  }
+
   /**
    * Extracts the colour channel bit masks (red, green, blue, alpha) from the DIB header.
    *
@@ -1059,8 +1206,7 @@ public class BitmapParser implements IParser {
       } else if (compression == 3) {
         readBitfieldPixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
       } else if (compression == 2) {
-        throw new UnsupportedOperationException(
-            "Run-Length Encoded for 4bpp (BI_RLE4) compression is not implemented yet.");
+        readRLE4Pixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
       } else if (compression == 4 || compression == 5) {
         throw new UnsupportedOperationException(
             "JPEG or PNG embedded compression is not supported for direct pixel reading.");

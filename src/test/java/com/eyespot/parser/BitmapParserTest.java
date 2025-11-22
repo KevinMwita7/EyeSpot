@@ -45,6 +45,8 @@ class BitmapParserTest {
 
   private static BitmapParser v4ParserWithPaletteAndAlpha;
 
+  private static BitmapParser common4BitCompressedParser;
+
   private static BitmapParser badBitCountParser;
 
   private static BitmapV4Header v4Header;
@@ -100,6 +102,13 @@ class BitmapParserTest {
     Assertions.assertNotNull(common8BitCompressedWithAbsoluteRunParserResource);
     common8BitCompressedWithAbsoluteRunParser =
         new BitmapParser(Paths.get(common8BitCompressedWithAbsoluteRunParserResource.toURI()));
+
+    // Parser for 4bpp BI_RLE4 compressed and has BITMAPINFOHEADER
+    URL common4BitCompressedParserResource =
+        BitmapParserTest.class.getClassLoader().getResource("4bit_compressed.bmp");
+    Assertions.assertNotNull(common4BitCompressedParserResource);
+    common4BitCompressedParser =
+        new BitmapParser(Paths.get(common4BitCompressedParserResource.toURI()));
 
     // Parser for 16bpp bitmap with BITMAPINFOHEADER
     URL commonParser16BitResource =
@@ -529,6 +538,21 @@ class BitmapParserTest {
     Assertions.assertEquals(
         common8BitCompressedWithAbsoluteRunParser.getWidth()
             * common8BitCompressedWithAbsoluteRunParser.getHeight(),
+        totalElements);
+  }
+
+  // 4bpp BI_RLE4 compressed bitmap with BITMAPINFOHEADER
+  @Test
+  void Given4bppCompressedBitmap_GetCompression_Returns2() {
+    Assertions.assertEquals(2, common4BitCompressedParser.getCompression());
+  }
+
+  @Test
+  void Given4BppCompressedBitmap_GetPixels_ReturnAllPixels() {
+    int[][] pixels = common4BitCompressedParser.getPixels();
+    int totalElements = pixels[0].length * pixels.length;
+    Assertions.assertEquals(
+        common4BitCompressedParser.getWidth() * common4BitCompressedParser.getHeight(),
         totalElements);
   }
 
