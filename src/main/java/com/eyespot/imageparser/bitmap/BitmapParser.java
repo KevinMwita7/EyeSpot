@@ -851,7 +851,7 @@ public class BitmapParser implements IParser {
             currentFileOffset += (numPixels + 1) / 2;
 
             // Padding to WORD boundary
-            if ((((numPixels + 1) / 2) % 2) != 0) {
+            if ((numPixels + 1) / 2 % 2 != 0) {
               currentFileOffset++;
             }
             break;
