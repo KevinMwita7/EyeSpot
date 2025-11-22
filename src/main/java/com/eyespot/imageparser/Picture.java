@@ -611,9 +611,9 @@ public class Picture implements ActionListener {
   }
 
   public static void main(String[] args) throws IOException {
-      Picture picture = new Picture(Path.of(args[0]));
-      String message = String.format("%d-by-%d%n", picture.width, picture.height);
-      LOGGER.log(Level.INFO, message);
-      picture.show();
+    Picture picture = new Picture(Path.of(args[0]));
+    String message = String.format("%d-by-%d%n", picture.width, picture.height);
+    LOGGER.log(Level.INFO, message);
+    picture.show();
   }
 }
