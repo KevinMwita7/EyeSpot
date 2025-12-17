@@ -1040,4 +1040,174 @@ class BitmapParserTest {
     Executable executable = () -> new BitmapParser(Paths.get(paletteResource.toURI()));
     Assertions.assertThrows(IllegalArgumentException.class, executable);
   }
+
+  // Tests for calculateExpectedOffset (zero offset handling)
+  @Test
+  void GivenBitmapWithZeroOffset_WhenGetPixels_ThenUsesCalculatedOffset() {
+    // Create a minimal 1x1 24bpp bitmap with zero offset
+    byte[] bytes =
+        new byte[] {
+          // File Header (14 bytes)
+          0x42, 0x4D, // "BM" magic number
+          0x3E, 0x00, 0x00, 0x00, // File size: 62 bytes
+          0x00, 0x00, // Reserved1
+          0x00, 0x00, // Reserved2
+          0x00, 0x00, 0x00, 0x00, // Offset: 0 (INVALID - should be 54)
+          // DIB Header - BITMAPINFOHEADER (40 bytes)
+          0x28, 0x00, 0x00, 0x00, // Header size: 40
+          0x01, 0x00, 0x00, 0x00, // Width: 1
+          0x01, 0x00, 0x00, 0x00, // Height: 1
+          0x01, 0x00, // Color planes: 1
+          0x18, 0x00, // Bits per pixel: 24
+          0x00, 0x00, 0x00, 0x00, // Compression: 0 (BI_RGB)
+          0x04, 0x00, 0x00, 0x00, // Image size: 4 bytes
+          0x13, 0x0B, 0x00, 0x00, // X pixels per meter
+          0x13, 0x0B, 0x00, 0x00, // Y pixels per meter
+          0x00, 0x00, 0x00, 0x00, // Colors used: 0
+          0x00, 0x00, 0x00, 0x00, // Important colors: 0
+          // Pixel Data (4 bytes: 3 for pixel + 1 padding)
+          (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, 0x00 // White pixel + padding
+        };
+
+    BitmapParser parser = new BitmapParser(bytes);
+    Assertions.assertDoesNotThrow(parser::getPixels);
+    int[][] pixels = parser.getPixels();
+    Assertions.assertEquals(1, pixels.length);
+    Assertions.assertEquals(1, pixels[0].length);
+  }
+
+  @Test
+  void GivenBitmapWithNegativeOffset_WhenGetPixels_ThenUsesCalculatedOffset() {
+    // Create a minimal 1x1 24bpp bitmap with negative offset
+    byte[] bytes =
+        new byte[] {
+          // File Header (14 bytes)
+          0x42, 0x4D, // "BM" magic number
+          0x3E, 0x00, 0x00, 0x00, // File size: 62 bytes
+          0x00, 0x00, // Reserved1
+          0x00, 0x00, // Reserved2
+          (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, // Offset: -1 (INVALID)
+          // DIB Header - BITMAPINFOHEADER (40 bytes)
+          0x28, 0x00, 0x00, 0x00, // Header size: 40
+          0x01, 0x00, 0x00, 0x00, // Width: 1
+          0x01, 0x00, 0x00, 0x00, // Height: 1
+          0x01, 0x00, // Color planes: 1
+          0x18, 0x00, // Bits per pixel: 24
+          0x00, 0x00, 0x00, 0x00, // Compression: 0 (BI_RGB)
+          0x04, 0x00, 0x00, 0x00, // Image size: 4 bytes
+          0x13, 0x0B, 0x00, 0x00, // X pixels per meter
+          0x13, 0x0B, 0x00, 0x00, // Y pixels per meter
+          0x00, 0x00, 0x00, 0x00, // Colors used: 0
+          0x00, 0x00, 0x00, 0x00, // Important colors: 0
+          // Pixel Data (4 bytes: 3 for pixel + 1 padding)
+          (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, 0x00 // White pixel + padding
+        };
+
+    BitmapParser parser = new BitmapParser(bytes);
+    Assertions.assertDoesNotThrow(parser::getPixels);
+    int[][] pixels = parser.getPixels();
+    Assertions.assertEquals(1, pixels.length);
+    Assertions.assertEquals(1, pixels[0].length);
+  }
+
+  @Test
+  void GivenBitmapWithZeroOffsetAndPalette_WhenGetPixels_ThenCalculatesOffsetWithPalette() {
+    // Create a minimal 1x1 8bpp bitmap with zero offset and color palette
+    byte[] bytes =
+        new byte[] {
+          // File Header (14 bytes)
+          0x42, 0x4D, // "BM" magic number
+          0x46, 0x04, 0x00, 0x00, // File size
+          0x00, 0x00, // Reserved1
+          0x00, 0x00, // Reserved2
+          0x00, 0x00, 0x00, 0x00, // Offset: 0 (INVALID - should be 14+40+1024=1078)
+          // DIB Header - BITMAPINFOHEADER (40 bytes)
+          0x28, 0x00, 0x00, 0x00, // Header size: 40
+          0x01, 0x00, 0x00, 0x00, // Width: 1
+          0x01, 0x00, 0x00, 0x00, // Height: 1
+          0x01, 0x00, // Color planes: 1
+          0x08, 0x00, // Bits per pixel: 8
+          0x00, 0x00, 0x00, 0x00, // Compression: 0 (BI_RGB)
+          0x04, 0x00, 0x00, 0x00, // Image size: 4 bytes
+          0x13, 0x0B, 0x00, 0x00, // X pixels per meter
+          0x13, 0x0B, 0x00, 0x00, // Y pixels per meter
+          0x00, 0x00, 0x00, 0x00, // Colors used: 0 (defaults to 256)
+          0x00, 0x00, 0x00, 0x00, // Important colors: 0
+          // Color Palette (256 entries * 4 bytes = 1024 bytes)
+          // Entry 0: Black
+          0x00, 0x00, 0x00, 0x00, // B, G, R, Reserved
+        };
+
+    // Fill remaining 255 palette entries (simplified - all black)
+    byte[] fullBytes = new byte[14 + 40 + 1024 + 4];
+    System.arraycopy(bytes, 0, fullBytes, 0, bytes.length);
+    // Add pixel data at the end
+    fullBytes[fullBytes.length - 4] = 0x00; // Pixel index 0
+    fullBytes[fullBytes.length - 3] = 0x00; // Padding
+    fullBytes[fullBytes.length - 2] = 0x00; // Padding
+    fullBytes[fullBytes.length - 1] = 0x00; // Padding
+
+    BitmapParser parser = new BitmapParser(fullBytes);
+    Assertions.assertDoesNotThrow(parser::getPixels);
+    int[][] pixels = parser.getPixels();
+    Assertions.assertEquals(1, pixels.length);
+    Assertions.assertEquals(1, pixels[0].length);
+  }
+
+  // Tests for hasAlphaChannel optimization and caching
+  @Test
+  void GivenBitmap_WhenHasAlphaChannelCalledTwice_ThenReturnsCachedResult() {
+    // First call should compute the result
+    boolean firstCall = v4ParserWithPaletteAndAlpha.hasAlphaChannel();
+    // Second call should return cached result (faster)
+    boolean secondCall = v4ParserWithPaletteAndAlpha.hasAlphaChannel();
+
+    Assertions.assertEquals(firstCall, secondCall);
+    Assertions.assertTrue(firstCall); // This bitmap is known to have alpha
+  }
+
+  @Test
+  void GivenV3BitmapWithAlphaMask_WhenHasAlphaChannel_ThenReturnsTrueWithoutPixelScan() {
+    // v3Parser is already initialized and has an alpha mask
+    // This test verifies that hasAlphaChannel returns true based on header metadata
+    boolean hasAlpha = v3Parser.hasAlphaChannel();
+    Assertions.assertTrue(hasAlpha);
+
+    // Verify it can be called multiple times (caching)
+    boolean hasAlphaCached = v3Parser.hasAlphaChannel();
+    Assertions.assertTrue(hasAlphaCached);
+  }
+
+  @Test
+  void GivenV4BitmapWithAlphaMask_WhenHasAlphaChannel_ThenReturnsTrueWithoutPixelScan() {
+    // v4Parser is already initialized and has an alpha mask
+    boolean hasAlpha = v4Parser.hasAlphaChannel();
+    Assertions.assertTrue(hasAlpha);
+
+    // Verify it can be called multiple times (caching)
+    boolean hasAlphaCached = v4Parser.hasAlphaChannel();
+    Assertions.assertTrue(hasAlphaCached);
+  }
+
+  @Test
+  void GivenCommonBitmapWithoutAlpha_WhenHasAlphaChannel_ThenReturnsFalse() {
+    // commonParser is a 24bpp image without alpha
+    boolean hasAlpha = commonParser.hasAlphaChannel();
+    Assertions.assertFalse(hasAlpha);
+
+    // Verify caching works
+    boolean hasAlphaCached = commonParser.hasAlphaChannel();
+    Assertions.assertFalse(hasAlphaCached);
+  }
+
+  @Test
+  void GivenBitmapWithPalette_WhenHasAlphaChannel_ThenChecksPaletteFirst() {
+    // commonParserWithColourPalette has a palette but no alpha
+    boolean hasAlpha = commonParserWithColourPalette.hasAlphaChannel();
+    Assertions.assertFalse(hasAlpha);
+
+    // v4ParserWithPaletteAndAlpha has a palette with alpha
+    boolean hasAlphaWithPalette = v4ParserWithPaletteAndAlpha.hasAlphaChannel();
+    Assertions.assertTrue(hasAlphaWithPalette);
+  }
 }

@@ -49,6 +49,9 @@ public class BitmapParser implements IParser {
   /** The bitmap colour palette, if present. */
   private final ColourPalette colourPalette;
 
+  /** Cached result for alpha channel detection to avoid expensive pixel scanning. */
+  private Boolean cachedHasAlphaChannel = null;
+
   private static final Logger LOGGER = Logger.getLogger(BitmapParser.class.getName());
 
   /**
@@ -1179,26 +1182,65 @@ public class BitmapParser implements IParser {
     return dibHeader.getBitsPerPixel() <= 8; // Typically for 1, 4, or 8 bpp
   }
 
-  /** @return true if alpha channel is present in the colour palette and false otherwise */
+  /**
+   * Determines if the bitmap has an alpha channel.
+   *
+   * <p>This method uses a multi-stage approach for efficiency:
+   *
+   * <ol>
+   *   <li>Returns cached result if available
+   *   <li>Checks color palette for alpha channel (for indexed color images)
+   *   <li>Checks header metadata for alpha mask (V3/V4/V5 headers)
+   *   <li>Only scans pixel data as a last resort (expensive operation)
+   * </ol>
+   *
+   * @return true if alpha channel is present, false otherwise
+   */
   @Override
   public boolean hasAlphaChannel() {
-    if (colourPalette != null) {
-      return colourPalette.hasAlphaChannel();
+    // Return cached result if available
+    if (cachedHasAlphaChannel != null) {
+      return cachedHasAlphaChannel;
     }
 
-    // For non-palette images, check if any pixel has non-opaque alpha
-    // Use existing getPixels() to handle all compression formats correctly
-    int[][] pixels = getPixels();
-    for (int row = 0; row < pixels.length; row++) {
-      for (int col = 0; col < pixels[row].length; col++) {
-        int argb = pixels[row][col];
-        int alpha = (argb >> 24) & BitmapConstants.BYTE_MASK;
-        if (alpha != BitmapConstants.OPAQUE_ALPHA) {
-          return true;
-        }
+    boolean hasAlpha = false;
+
+    // Check color palette first (for indexed color images)
+    if (colourPalette != null) {
+      hasAlpha = colourPalette.hasAlphaChannel();
+      cachedHasAlphaChannel = hasAlpha;
+      return hasAlpha;
+    }
+
+    // Check header metadata for alpha mask (V3/V4/V5 headers)
+    // Note: BitmapV5Header extends BitmapV4Header, so the V4 check covers both
+    if (dibHeader instanceof BitmapV3InfoHeader) {
+      long alphaMask = ((BitmapV3InfoHeader) dibHeader).getAlphaMask();
+      if (alphaMask != 0) {
+        cachedHasAlphaChannel = true;
+        return true;
+      }
+    } else if (dibHeader instanceof BitmapV4Header) {
+      // This also covers BitmapV5Header since it extends BitmapV4Header
+      long alphaMask = ((BitmapV4Header) dibHeader).getAlphaMask();
+      if (alphaMask != 0) {
+        cachedHasAlphaChannel = true;
+        return true;
       }
     }
 
+    int[][] pixels = getPixels();
+      for (int[] pixel : pixels) {
+          for (int argb : pixel) {
+              int alpha = (argb >> 24) & BitmapConstants.BYTE_MASK;
+              if (alpha != BitmapConstants.OPAQUE_ALPHA) {
+                  cachedHasAlphaChannel = true;
+                  return true;
+              }
+          }
+      }
+
+    cachedHasAlphaChannel = false;
     return false;
   }
 
