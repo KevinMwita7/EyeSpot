@@ -145,6 +145,56 @@ public class BitmapParser implements IParser {
     }
   }
 
+  /**
+   * Calculates the expected offset to pixel data based on the file structure.
+   *
+   * <p>This method is used when the offset specified in the bitmap header is invalid (e.g., zero or
+   * negative). The offset is calculated as: File Header (14 bytes) + DIB Header + Bit Masks (if
+   * present) + Color Palette (if present).
+   *
+   * @return the calculated expected offset to pixel data
+   */
+  private int calculateExpectedOffset() {
+    int offset = BitmapConstants.FILE_HEADER_SIZE + this.dibHeader.getHeaderSize();
+
+    // Add bit mask size if using bitfield compression
+    if (dibHeader.getCompression() == BitmapConstants.BI_BITFIELDS) {
+      offset += BitmapConstants.BITFIELD_MASKS_SIZE_V3;
+    } else if (dibHeader.getCompression() == BitmapConstants.BI_ALPHABITFIELDS) {
+      offset += BitmapConstants.BITFIELD_MASKS_SIZE_V4;
+    }
+
+    // Add color palette size if present
+    if (this.colourPalette != null) {
+      int bytesPerPaletteEntry;
+      // BITMAPCOREHEADER uses RGBTRIPLE (3 bytes), others use RGBQUAD (4 bytes)
+      if (InfoHeaderType.BITMAPCOREHEADER.equals(dibHeader.getType())) {
+        bytesPerPaletteEntry = 3;
+      } else {
+        bytesPerPaletteEntry = 4;
+      }
+      offset += this.colourPalette.getNumberOfEntries() * bytesPerPaletteEntry;
+    }
+
+    return offset;
+  }
+
+  /**
+   * Returns the actual offset to pixel data, using the calculated offset if the header offset is
+   * invalid.
+   *
+   * <p>Some malformed BMP files have an offset value of zero or negative in the header. In such
+   * cases, this method calculates the expected offset based on the file structure.
+   *
+   * @return the actual offset to pixel data
+   */
+  private int getActualOffset() {
+    if (header.getOffset() <= 0) {
+      return calculateExpectedOffset();
+    }
+    return header.getOffset();
+  }
+
   /** Helper method to read uncompressed (BI_RGB) pixel data into the pixels array. */
   private void readUncompressedPixels(
       int[][] pixels, int displayRowMapMultiplier, int displayRowMapOffset)
@@ -247,7 +297,7 @@ public class BitmapParser implements IParser {
   private int getIndexedColourModePixelValue(int row, int cell, int scanlineByteSize)
       throws CorruptedImageException {
     // Calculate the current row's offset in the file
-    int currentScanlineFileOffset = header.getOffset() + (row * scanlineByteSize);
+    int currentScanlineFileOffset = getActualOffset() + (row * scanlineByteSize);
     int bitsPerPixel = dibHeader.getBitsPerPixel();
 
     int currentPixelFileOffset = currentScanlineFileOffset + (cell * bitsPerPixel / 8);
@@ -300,7 +350,7 @@ public class BitmapParser implements IParser {
   private int getNonIndexedColourModePixelValue(int i, int x, int scanlineByteSize)
       throws CorruptedImageException {
     // Calculate the current row's offset in the file
-    int currentScanlineFileOffset = header.getOffset() + (i * scanlineByteSize);
+    int currentScanlineFileOffset = getActualOffset() + (i * scanlineByteSize);
 
     switch (dibHeader.getBitsPerPixel()) {
       case 16:
@@ -406,7 +456,7 @@ public class BitmapParser implements IParser {
     long unsignedShortMask = (1L << bitsPerPixel) - 1;
 
     for (int i = fileRowIndexStart; i != fileRowIndexEnd; i += fileRowIncrement) {
-      int scanlineOffset = header.getOffset() + (i * scanlineByteSize);
+      int scanlineOffset = getActualOffset() + (i * scanlineByteSize);
       int displayRowIndex = displayRowMapOffset + (i * displayRowMapMultiplier);
 
       for (int x = 0; x < width; x++) {
@@ -527,7 +577,7 @@ public class BitmapParser implements IParser {
       throw new IllegalArgumentException("BI_RLE8 compression is only valid for 8 bits per pixel.");
     }
 
-    RLEDecodingContext ctx = new RLEDecodingContext(header.getOffset());
+    RLEDecodingContext ctx = new RLEDecodingContext(getActualOffset());
 
     while (ctx.fileOffset < data.length && !ctx.endOfBitmap) {
       if (ctx.fileOffset + 1 >= data.length) {
@@ -727,7 +777,7 @@ public class BitmapParser implements IParser {
       throw new IllegalArgumentException("BI_RLE4 compression is only valid for 4 bits per pixel.");
     }
 
-    RLEDecodingContext ctx = new RLEDecodingContext(header.getOffset());
+    RLEDecodingContext ctx = new RLEDecodingContext(getActualOffset());
 
     while (ctx.fileOffset < data.length && !ctx.endOfBitmap) {
       if (ctx.fileOffset + 1 >= data.length) {
