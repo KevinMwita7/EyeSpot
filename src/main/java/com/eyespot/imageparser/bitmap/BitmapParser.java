@@ -532,6 +532,9 @@ public class BitmapParser implements IParser {
    */
   /** Helper class to track RLE decoding state and handle common escape sequences. */
   private static class RLEDecodingContext {
+    private static final int END_OF_LINE = 0x00;
+    private static final int END_OF_BITMAP = 0x01;
+    private static final int DELTA = 0x02;
     int fileOffset;
     int x;
     int y;
@@ -549,10 +552,6 @@ public class BitmapParser implements IParser {
      */
     boolean handleEscapeSequence(int code, byte[] data, String format)
         throws CorruptedImageException {
-      final int END_OF_LINE = 0x00;
-      final int END_OF_BITMAP = 0x01;
-      final int DELTA = 0x02;
-
       switch (code) {
         case END_OF_LINE:
           x = 0;
@@ -1294,7 +1293,9 @@ public class BitmapParser implements IParser {
         throw new UnsupportedOperationException("Unsupported BMP compression type: " + compression);
       }
     } catch (CorruptedImageException e) {
-      LOGGER.log(Level.SEVERE, "Failed to read pixel data: {0}", e.getMessage());
+      if (LOGGER.isLoggable(Level.SEVERE)) {
+        LOGGER.log(Level.SEVERE, "Failed to read pixel data: {0}", e.getMessage());
+      }
     }
 
     return pixels;
