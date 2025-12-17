@@ -530,9 +530,7 @@ public class BitmapParser implements IParser {
    * @throws IllegalArgumentException if the DIB header does not specify 8 bits per pixel, or if the
    *     data stream is malformed
    */
-  /**
-   * Helper class to track RLE decoding state and handle common escape sequences.
-   */
+  /** Helper class to track RLE decoding state and handle common escape sequences. */
   private static class RLEDecodingContext {
     int fileOffset;
     int x;
@@ -546,8 +544,11 @@ public class BitmapParser implements IParser {
       this.endOfBitmap = false;
     }
 
-    /** Handles RLE escape sequences that are identical for RLE4 and RLE8. Returns true if handled. */
-    boolean handleEscapeSequence(int code, byte[] data, String format) throws CorruptedImageException {
+    /**
+     * Handles RLE escape sequences that are identical for RLE4 and RLE8. Returns true if handled.
+     */
+    boolean handleEscapeSequence(int code, byte[] data, String format)
+        throws CorruptedImageException {
       final int END_OF_LINE = 0x00;
       final int END_OF_BITMAP = 0x01;
       final int DELTA = 0x02;
@@ -627,7 +628,13 @@ public class BitmapParser implements IParser {
               false);
           ctx.x =
               writeBIRLE8AbsoluteRun(
-                  pixels, code, displayRowMapOffset, displayRowMapMultiplier, ctx.x, ctx.y, ctx.fileOffset);
+                  pixels,
+                  code,
+                  displayRowMapOffset,
+                  displayRowMapMultiplier,
+                  ctx.x,
+                  ctx.y,
+                  ctx.fileOffset);
           ctx.fileOffset += code;
           if (code % 2 != 0) {
             ctx.fileOffset++;
@@ -831,7 +838,13 @@ public class BitmapParser implements IParser {
               false);
           ctx.x =
               writeBIRLE4AbsoluteRun(
-                  pixels, code, displayRowMapOffset, displayRowMapMultiplier, ctx.x, ctx.y, ctx.fileOffset);
+                  pixels,
+                  code,
+                  displayRowMapOffset,
+                  displayRowMapMultiplier,
+                  ctx.x,
+                  ctx.y,
+                  ctx.fileOffset);
           ctx.fileOffset += bytesNeeded;
           if (bytesNeeded % 2 != 0) {
             ctx.fileOffset++;
@@ -1230,15 +1243,15 @@ public class BitmapParser implements IParser {
     }
 
     int[][] pixels = getPixels();
-      for (int[] pixel : pixels) {
-          for (int argb : pixel) {
-              int alpha = (argb >> 24) & BitmapConstants.BYTE_MASK;
-              if (alpha != BitmapConstants.OPAQUE_ALPHA) {
-                  cachedHasAlphaChannel = true;
-                  return true;
-              }
-          }
+    for (int[] pixel : pixels) {
+      for (int argb : pixel) {
+        int alpha = (argb >> 24) & BitmapConstants.BYTE_MASK;
+        if (alpha != BitmapConstants.OPAQUE_ALPHA) {
+          cachedHasAlphaChannel = true;
+          return true;
+        }
       }
+    }
 
     cachedHasAlphaChannel = false;
     return false;

@@ -28,8 +28,7 @@ final class ColourPalette {
     int numEntries;
     // If the number of colours in the colour palette is 0 or colours used > important colours,
     // default to 2^n where n == bits per pixel
-    if (dibHeader.getNColours() == 0
-        || dibHeader.getNColours() > dibHeader.getImportantColours()) {
+    if (dibHeader.getNColours() == 0 || dibHeader.getNColours() > dibHeader.getImportantColours()) {
       numEntries = 1 << dibHeader.getBitsPerPixel(); // Max colours for bit-depth
     } else {
       numEntries = dibHeader.getNColours();

@@ -1048,25 +1048,66 @@ class BitmapParserTest {
     byte[] bytes =
         new byte[] {
           // File Header (14 bytes)
-          0x42, 0x4D, // "BM" magic number
-          0x3E, 0x00, 0x00, 0x00, // File size: 62 bytes
-          0x00, 0x00, // Reserved1
-          0x00, 0x00, // Reserved2
-          0x00, 0x00, 0x00, 0x00, // Offset: 0 (INVALID - should be 54)
+          0x42,
+          0x4D, // "BM" magic number
+          0x3E,
+          0x00,
+          0x00,
+          0x00, // File size: 62 bytes
+          0x00,
+          0x00, // Reserved1
+          0x00,
+          0x00, // Reserved2
+          0x00,
+          0x00,
+          0x00,
+          0x00, // Offset: 0 (INVALID - should be 54)
           // DIB Header - BITMAPINFOHEADER (40 bytes)
-          0x28, 0x00, 0x00, 0x00, // Header size: 40
-          0x01, 0x00, 0x00, 0x00, // Width: 1
-          0x01, 0x00, 0x00, 0x00, // Height: 1
-          0x01, 0x00, // Color planes: 1
-          0x18, 0x00, // Bits per pixel: 24
-          0x00, 0x00, 0x00, 0x00, // Compression: 0 (BI_RGB)
-          0x04, 0x00, 0x00, 0x00, // Image size: 4 bytes
-          0x13, 0x0B, 0x00, 0x00, // X pixels per meter
-          0x13, 0x0B, 0x00, 0x00, // Y pixels per meter
-          0x00, 0x00, 0x00, 0x00, // Colors used: 0
-          0x00, 0x00, 0x00, 0x00, // Important colors: 0
+          0x28,
+          0x00,
+          0x00,
+          0x00, // Header size: 40
+          0x01,
+          0x00,
+          0x00,
+          0x00, // Width: 1
+          0x01,
+          0x00,
+          0x00,
+          0x00, // Height: 1
+          0x01,
+          0x00, // Color planes: 1
+          0x18,
+          0x00, // Bits per pixel: 24
+          0x00,
+          0x00,
+          0x00,
+          0x00, // Compression: 0 (BI_RGB)
+          0x04,
+          0x00,
+          0x00,
+          0x00, // Image size: 4 bytes
+          0x13,
+          0x0B,
+          0x00,
+          0x00, // X pixels per meter
+          0x13,
+          0x0B,
+          0x00,
+          0x00, // Y pixels per meter
+          0x00,
+          0x00,
+          0x00,
+          0x00, // Colors used: 0
+          0x00,
+          0x00,
+          0x00,
+          0x00, // Important colors: 0
           // Pixel Data (4 bytes: 3 for pixel + 1 padding)
-          (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, 0x00 // White pixel + padding
+          (byte) 0xFF,
+          (byte) 0xFF,
+          (byte) 0xFF,
+          0x00 // White pixel + padding
         };
 
     BitmapParser parser = new BitmapParser(bytes);
@@ -1082,25 +1123,66 @@ class BitmapParserTest {
     byte[] bytes =
         new byte[] {
           // File Header (14 bytes)
-          0x42, 0x4D, // "BM" magic number
-          0x3E, 0x00, 0x00, 0x00, // File size: 62 bytes
-          0x00, 0x00, // Reserved1
-          0x00, 0x00, // Reserved2
-          (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, // Offset: -1 (INVALID)
+          0x42,
+          0x4D, // "BM" magic number
+          0x3E,
+          0x00,
+          0x00,
+          0x00, // File size: 62 bytes
+          0x00,
+          0x00, // Reserved1
+          0x00,
+          0x00, // Reserved2
+          (byte) 0xFF,
+          (byte) 0xFF,
+          (byte) 0xFF,
+          (byte) 0xFF, // Offset: -1 (INVALID)
           // DIB Header - BITMAPINFOHEADER (40 bytes)
-          0x28, 0x00, 0x00, 0x00, // Header size: 40
-          0x01, 0x00, 0x00, 0x00, // Width: 1
-          0x01, 0x00, 0x00, 0x00, // Height: 1
-          0x01, 0x00, // Color planes: 1
-          0x18, 0x00, // Bits per pixel: 24
-          0x00, 0x00, 0x00, 0x00, // Compression: 0 (BI_RGB)
-          0x04, 0x00, 0x00, 0x00, // Image size: 4 bytes
-          0x13, 0x0B, 0x00, 0x00, // X pixels per meter
-          0x13, 0x0B, 0x00, 0x00, // Y pixels per meter
-          0x00, 0x00, 0x00, 0x00, // Colors used: 0
-          0x00, 0x00, 0x00, 0x00, // Important colors: 0
+          0x28,
+          0x00,
+          0x00,
+          0x00, // Header size: 40
+          0x01,
+          0x00,
+          0x00,
+          0x00, // Width: 1
+          0x01,
+          0x00,
+          0x00,
+          0x00, // Height: 1
+          0x01,
+          0x00, // Color planes: 1
+          0x18,
+          0x00, // Bits per pixel: 24
+          0x00,
+          0x00,
+          0x00,
+          0x00, // Compression: 0 (BI_RGB)
+          0x04,
+          0x00,
+          0x00,
+          0x00, // Image size: 4 bytes
+          0x13,
+          0x0B,
+          0x00,
+          0x00, // X pixels per meter
+          0x13,
+          0x0B,
+          0x00,
+          0x00, // Y pixels per meter
+          0x00,
+          0x00,
+          0x00,
+          0x00, // Colors used: 0
+          0x00,
+          0x00,
+          0x00,
+          0x00, // Important colors: 0
           // Pixel Data (4 bytes: 3 for pixel + 1 padding)
-          (byte) 0xFF, (byte) 0xFF, (byte) 0xFF, 0x00 // White pixel + padding
+          (byte) 0xFF,
+          (byte) 0xFF,
+          (byte) 0xFF,
+          0x00 // White pixel + padding
         };
 
     BitmapParser parser = new BitmapParser(bytes);
@@ -1116,26 +1198,67 @@ class BitmapParserTest {
     byte[] bytes =
         new byte[] {
           // File Header (14 bytes)
-          0x42, 0x4D, // "BM" magic number
-          0x46, 0x04, 0x00, 0x00, // File size
-          0x00, 0x00, // Reserved1
-          0x00, 0x00, // Reserved2
-          0x00, 0x00, 0x00, 0x00, // Offset: 0 (INVALID - should be 14+40+1024=1078)
+          0x42,
+          0x4D, // "BM" magic number
+          0x46,
+          0x04,
+          0x00,
+          0x00, // File size
+          0x00,
+          0x00, // Reserved1
+          0x00,
+          0x00, // Reserved2
+          0x00,
+          0x00,
+          0x00,
+          0x00, // Offset: 0 (INVALID - should be 14+40+1024=1078)
           // DIB Header - BITMAPINFOHEADER (40 bytes)
-          0x28, 0x00, 0x00, 0x00, // Header size: 40
-          0x01, 0x00, 0x00, 0x00, // Width: 1
-          0x01, 0x00, 0x00, 0x00, // Height: 1
-          0x01, 0x00, // Color planes: 1
-          0x08, 0x00, // Bits per pixel: 8
-          0x00, 0x00, 0x00, 0x00, // Compression: 0 (BI_RGB)
-          0x04, 0x00, 0x00, 0x00, // Image size: 4 bytes
-          0x13, 0x0B, 0x00, 0x00, // X pixels per meter
-          0x13, 0x0B, 0x00, 0x00, // Y pixels per meter
-          0x00, 0x00, 0x00, 0x00, // Colors used: 0 (defaults to 256)
-          0x00, 0x00, 0x00, 0x00, // Important colors: 0
+          0x28,
+          0x00,
+          0x00,
+          0x00, // Header size: 40
+          0x01,
+          0x00,
+          0x00,
+          0x00, // Width: 1
+          0x01,
+          0x00,
+          0x00,
+          0x00, // Height: 1
+          0x01,
+          0x00, // Color planes: 1
+          0x08,
+          0x00, // Bits per pixel: 8
+          0x00,
+          0x00,
+          0x00,
+          0x00, // Compression: 0 (BI_RGB)
+          0x04,
+          0x00,
+          0x00,
+          0x00, // Image size: 4 bytes
+          0x13,
+          0x0B,
+          0x00,
+          0x00, // X pixels per meter
+          0x13,
+          0x0B,
+          0x00,
+          0x00, // Y pixels per meter
+          0x00,
+          0x00,
+          0x00,
+          0x00, // Colors used: 0 (defaults to 256)
+          0x00,
+          0x00,
+          0x00,
+          0x00, // Important colors: 0
           // Color Palette (256 entries * 4 bytes = 1024 bytes)
           // Entry 0: Black
-          0x00, 0x00, 0x00, 0x00, // B, G, R, Reserved
+          0x00,
+          0x00,
+          0x00,
+          0x00, // B, G, R, Reserved
         };
 
     // Fill remaining 255 palette entries (simplified - all black)
