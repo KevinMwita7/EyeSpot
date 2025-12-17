@@ -93,120 +93,6 @@ public class BitmapParser implements IParser {
   }
 
   /**
-   * Represents the colour palette (if present) in the BMP file.
-   *
-   * <p>Only present when bit depth is ≤ 8. Supports RGBTRIPLE (3-byte) and RGBQUAD (4-byte)
-   * entries.
-   *
-   * @see <a href="https://en.wikipedia.org/wiki/BMP_file_format#Colour_table">BMP Colour Table</a>
-   */
-  private static final class ColourPalette {
-    private final int[] colours;
-    private final boolean hasAlphaChannel;
-
-    /**
-     * Parses the colour palette from the BMP byte array.
-     *
-     * @param data the image byte array
-     * @param dibHeader the parsed DIB header
-     * @param paletteStartFileOffset file offset where the palette begins
-     */
-    private ColourPalette(byte[] data, DIBHeader dibHeader, int paletteStartFileOffset) {
-      int numEntries;
-      // If the number of colours in the colour palette is 0 or colours used > important colours,
-      // default to 2^n where n == bits per pixel
-      if (dibHeader.getNColours() == 0
-          || dibHeader.getNColours() > dibHeader.getImportantColours()) {
-        numEntries = 1 << dibHeader.getBitsPerPixel(); // Max colours for bit-depth
-      } else {
-        numEntries = dibHeader.getNColours();
-      }
-      this.colours = new int[numEntries];
-      int bytesPerPaletteEntry;
-
-      // Determine bytes per palette entry based on DIB header type
-      if (InfoHeaderType.BITMAPCOREHEADER.equals(dibHeader.getType())) {
-        // RGBTRIPLE (no 4th byte for alpha)
-        bytesPerPaletteEntry = 3;
-      } else {
-        // RGBQUAD (has the 4th byte)
-        bytesPerPaletteEntry = 4;
-      }
-
-      boolean foundNonZeroReservedByte = false;
-      boolean explicitAlphaFlag = false;
-
-      // Check for explicit alpha mask in BITMAPV4/V5 headers
-      if (dibHeader instanceof BitmapV4Header) {
-        explicitAlphaFlag = ((BitmapV4Header) dibHeader).getAlphaMask() != 0;
-      }
-
-      for (int i = 0; i < numEntries; i++) {
-        int entryOffset = paletteStartFileOffset + (i * bytesPerPaletteEntry);
-
-        // Basic bounds check for reading from data array
-        if (entryOffset + bytesPerPaletteEntry > data.length) {
-          throw new IllegalArgumentException(
-              String.format(
-                  "Palette data truncated or out of bounds at entry %d (offset: %d)",
-                  i, entryOffset));
-        }
-
-        // BMP stores BGR order. Alpha is often 0xFF (opaque) or ignored. But will try and handle it
-        // Java lacks unsigned byte hence the need for bitwise operations
-        int blue = data[entryOffset] & 0xFF;
-        int green = data[entryOffset + 1] & 0xFF;
-        int red = data[entryOffset + 2] & 0xFF;
-
-        // Default to opaque (255)
-        int alpha = 0xFF;
-
-        // Check alpha in bytes, if not explicitly stated in header
-        if (bytesPerPaletteEntry == 4) {
-          int parsedAlpha = data[entryOffset + 3] & 0xFF;
-          alpha = (parsedAlpha == 0) ? 0xFF : parsedAlpha;
-        }
-
-        foundNonZeroReservedByte = alpha != 0xFF;
-
-        // Store as ARGB (AARRGGBB)
-        this.colours[i] = (alpha << 24) | (red << 16) | (green << 8) | blue;
-      }
-
-      this.hasAlphaChannel = explicitAlphaFlag || foundNonZeroReservedByte;
-    }
-
-    /** @return the number of colour entries in the palette */
-    public int getNumberOfEntries() {
-      return colours.length;
-    }
-
-    /**
-     * Retrieves a colour entry from the palette.
-     *
-     * @param index the palette index
-     * @return the ARGB colour as {@code 0xAARRGGBB}
-     * @throws IndexOutOfBoundsException if index is out of bounds
-     */
-    public int getColour(int index) {
-      if (index < 0 || index >= colours.length) {
-        throw new IndexOutOfBoundsException(
-            String.format("Palette index %d out of bounds [0, %d]", index, colours.length - 1));
-      }
-      return colours[index];
-    }
-
-    /**
-     * Indicates if any alpha channel data is present in the palette.
-     *
-     * @return true if alpha channel is likely present
-     */
-    public boolean hasAlphaChannel() {
-      return hasAlphaChannel;
-    }
-  }
-
-  /**
    * Constructs a new {@code BitmapParser} by reading all bytes from the given file path.
    *
    * @param path the path to a BMP image file
@@ -245,14 +131,14 @@ public class BitmapParser implements IParser {
     this.dibHeader = DIBHeader.createDIBHeader(this.data);
 
     if (this.hasColourPalette()) {
-      int bitmask = 0;
-      if (dibHeader.getCompression() == 3) {
-        bitmask = 12;
-      } else if (dibHeader.getCompression() == 6) {
-        bitmask = 16;
+      int maskDataBlockSize = 0;
+      if (dibHeader.getCompression() == BitmapConstants.BI_BITFIELDS) {
+        maskDataBlockSize = BitmapConstants.BITFIELD_MASKS_SIZE_V3;
+      } else if (dibHeader.getCompression() == BitmapConstants.BI_ALPHABITFIELDS) {
+        maskDataBlockSize = BitmapConstants.BITFIELD_MASKS_SIZE_V4;
       }
       int paletteStartOffset =
-          BitmapConstants.FILE_HEADER_SIZE + this.dibHeader.getHeaderSize() + bitmask;
+          BitmapConstants.FILE_HEADER_SIZE + this.dibHeader.getHeaderSize() + maskDataBlockSize;
       this.colourPalette = new ColourPalette(this.data, this.dibHeader, paletteStartOffset);
     } else {
       this.colourPalette = null;
@@ -320,7 +206,7 @@ public class BitmapParser implements IParser {
    * @return the extracted pixel index
    */
   private int getPixelIndex(int currentPixelFileOffset, int bitsPerPixel, int pos) {
-    int byteContainingPixels = data[currentPixelFileOffset] & 0xFF;
+    int byteContainingPixels = data[currentPixelFileOffset] & BitmapConstants.BYTE_MASK;
 
     if (bitsPerPixel == 8) {
       return byteContainingPixels;
@@ -428,12 +314,12 @@ public class BitmapParser implements IParser {
               true);
           short pixelData = readShort(data, currentPixelFileOffset);
 
-          // Convert 5-bit components to 8-bit.
-          int b = (pixelData & 0x001F) * 255 / 31;
-          int g = ((pixelData & 0x03E0) >> 5) * 255 / 31;
-          int r = ((pixelData & 0x7C00) >> 10) * 255 / 31;
+          // Convert RGB555 5-bit components to 8-bit RGB888.
+          int r = expand5BitTo8Bit(extractRed5Bit(pixelData));
+          int g = expand5BitTo8Bit(extractGreen5Bit(pixelData));
+          int b = expand5BitTo8Bit(extractBlue5Bit(pixelData));
 
-          return (0xFF << 24) | (r << 16) | (g << 8) | b;
+          return (BitmapConstants.OPAQUE_ALPHA << 24) | (r << 16) | (g << 8) | b;
         }
       case 24:
         {
@@ -444,10 +330,10 @@ public class BitmapParser implements IParser {
               "Pixel data offset out of bounds for 24bpp pixel at (" + x + "," + i + ")",
               data.length,
               true);
-          int b = data[currentPixelFileOffset] & 0xFF;
-          int g = data[currentPixelFileOffset + 1] & 0xFF;
-          int r = data[currentPixelFileOffset + 2] & 0xFF;
-          return (0xFF << 24) | (r << 16) | (g << 8) | b;
+          int b = data[currentPixelFileOffset] & BitmapConstants.BYTE_MASK;
+          int g = data[currentPixelFileOffset + 1] & BitmapConstants.BYTE_MASK;
+          int r = data[currentPixelFileOffset + 2] & BitmapConstants.BYTE_MASK;
+          return (BitmapConstants.OPAQUE_ALPHA << 24) | (r << 16) | (g << 8) | b;
         }
       case 32:
         int currentPixelFileOffset = currentScanlineFileOffset + (x * 4);
@@ -457,12 +343,12 @@ public class BitmapParser implements IParser {
             "Pixel data offset out of bounds for 32bpp pixel at (" + x + "," + i + ")",
             data.length,
             true);
-        int b = data[currentPixelFileOffset] & 0xFF;
-        int g = data[currentPixelFileOffset + 1] & 0xFF;
-        int r = data[currentPixelFileOffset + 2] & 0xFF;
+        int b = data[currentPixelFileOffset] & BitmapConstants.BYTE_MASK;
+        int g = data[currentPixelFileOffset + 1] & BitmapConstants.BYTE_MASK;
+        int r = data[currentPixelFileOffset + 2] & BitmapConstants.BYTE_MASK;
         // For BI_RGB 32bpp, the 4th byte is usually alpha (A) or unused (X).
         // Currently, interpret it as alpha, as is common in modern usage.
-        int a = data[currentPixelFileOffset + 3] & 0xFF;
+        int a = data[currentPixelFileOffset + 3] & BitmapConstants.BYTE_MASK;
         return (a << 24) | (r << 16) | (g << 8) | b;
       default:
         throw new UnsupportedOperationException(
@@ -538,7 +424,10 @@ public class BitmapParser implements IParser {
         int r = extractComponent(pixelData, redMask);
         int g = extractComponent(pixelData, greenMask);
         int b = extractComponent(pixelData, blueMask);
-        int a = (alphaMask != 0) ? extractComponent(pixelData, alphaMask) : 0xFF;
+        int a =
+            (alphaMask != 0)
+                ? extractComponent(pixelData, alphaMask)
+                : BitmapConstants.OPAQUE_ALPHA;
 
         pixels[displayRowIndex][x] = (a << 24) | (r << 16) | (g << 8) | b;
       }
@@ -582,106 +471,114 @@ public class BitmapParser implements IParser {
    * method reads the compressed byte stream and fills the provided pixels array. It handles both
    * encoded runs and absolute runs, mapping logical coordinates to display coordinates.
    *
-   * @param pixels the 2D output pixel array to write decoded colors into
+   * @param pixels the 2D output pixel array to write decoded colours into
    * @param displayRowMapMultiplier determines if rows are bottom-up (-1) or top-down (1)
    * @param displayRowMapOffset offset to apply to the row index for display ordering
    * @throws IllegalArgumentException if the DIB header does not specify 8 bits per pixel, or if the
    *     data stream is malformed
    */
+  /**
+   * Helper class to track RLE decoding state and handle common escape sequences.
+   */
+  private static class RLEDecodingContext {
+    int fileOffset;
+    int x;
+    int y;
+    boolean endOfBitmap;
+
+    RLEDecodingContext(int initialOffset) {
+      this.fileOffset = initialOffset;
+      this.x = 0;
+      this.y = 0;
+      this.endOfBitmap = false;
+    }
+
+    /** Handles RLE escape sequences that are identical for RLE4 and RLE8. Returns true if handled. */
+    boolean handleEscapeSequence(int code, byte[] data, String format) throws CorruptedImageException {
+      final int END_OF_LINE = 0x00;
+      final int END_OF_BITMAP = 0x01;
+      final int DELTA = 0x02;
+
+      switch (code) {
+        case END_OF_LINE:
+          x = 0;
+          y++;
+          return true;
+        case END_OF_BITMAP:
+          this.endOfBitmap = true;
+          return true;
+        case DELTA:
+          ImageUtils.ensureBytesAvailable(
+              fileOffset, 2, format + " decoding error: Missing delta offsets.", data.length, true);
+          int dx = data[fileOffset++] & BitmapConstants.BYTE_MASK;
+          int dy = data[fileOffset++] & BitmapConstants.BYTE_MASK;
+          x += dx;
+          y += dy;
+          return true;
+        default:
+          return false; // Not a standard escape sequence, caller handles absolute mode
+      }
+    }
+  }
+
   private void readRLE8Pixels(int[][] pixels, int displayRowMapMultiplier, int displayRowMapOffset)
       throws CorruptedImageException {
     if (dibHeader.getBitsPerPixel() != 8) {
       throw new IllegalArgumentException("BI_RLE8 compression is only valid for 8 bits per pixel.");
     }
 
-    int currentFileOffset = header.getOffset();
-    int currentX = 0;
-    int currentY = 0;
-    final int endOfLine = 0x00;
-    final int endOfBitmap = 0x01;
-    final int delta = 0x02;
+    RLEDecodingContext ctx = new RLEDecodingContext(header.getOffset());
 
-    // Loop through the compressed data until EOB
-    while (currentFileOffset < data.length) {
-      // Need at least 2 bytes for any command or encoded run
-      if (currentFileOffset + 1 >= data.length) {
+    while (ctx.fileOffset < data.length && !ctx.endOfBitmap) {
+      if (ctx.fileOffset + 1 >= data.length) {
         break;
       }
-      int runLength = data[currentFileOffset++] & 0xFF;
+
+      int runLength = data[ctx.fileOffset++] & BitmapConstants.BYTE_MASK;
 
       if (runLength != 0) {
+        // Encoded mode
         ImageUtils.ensureBytesAvailable(
-            currentFileOffset,
+            ctx.fileOffset,
             1,
-            "RLE8 decoding error: Missing color index for encoded run.",
+            "RLE8 decoding error: Missing colour index for encoded run.",
             data.length,
             false);
-        int colourIndex = data[currentFileOffset++] & 0xFF;
-        currentX =
+        int colourIndex = data[ctx.fileOffset++] & BitmapConstants.BYTE_MASK;
+        ctx.x =
             writeBIRLE8EncodedRun(
                 pixels,
                 runLength,
                 displayRowMapOffset,
                 displayRowMapMultiplier,
-                currentX,
-                currentY,
+                ctx.x,
+                ctx.y,
                 colourIndex);
       } else {
+        // Escape mode
         ImageUtils.ensureBytesAvailable(
-            currentFileOffset,
+            ctx.fileOffset,
             1,
             "RLE8 decoding error: Missing escape code parameter.",
             data.length,
             false);
-        int code = data[currentFileOffset++] & 0xFF;
+        int code = data[ctx.fileOffset++] & BitmapConstants.BYTE_MASK;
 
-        switch (code) {
-          case endOfLine:
-            // CRLF
-            currentX = 0;
-            currentY++;
-            break;
-          case endOfBitmap:
-            return;
-          case delta:
-            ImageUtils.ensureBytesAvailable(
-                currentFileOffset,
-                2,
-                "RLE8 decoding error: Missing delta offsets (x, y).",
-                data.length,
-                true);
-            int dx = data[currentFileOffset++] & 0xFF;
-            int dy = data[currentFileOffset++] & 0xFF;
-
-            currentX += dx;
-            currentY += dy;
-            break;
-            // Absolute Mode (byte2 is count > 2)
-          default:
-            ImageUtils.ensureBytesAvailable(
-                currentFileOffset,
-                code,
-                "RLE8 decoding error: Not enough data for absolute run of " + code + " pixels.",
-                data.length,
-                false);
-            currentX =
-                writeBIRLE8AbsoluteRun(
-                    pixels,
-                    code,
-                    displayRowMapOffset,
-                    displayRowMapMultiplier,
-                    currentX,
-                    currentY,
-                    currentFileOffset);
-            // Advance past pixel data
-            currentFileOffset += code;
-
-            // Absolute Mode Padding: data must be aligned to a WORD (16-bit) boundary.
-            // If count is odd, there's an extra padding byte. Skip padding byte
-            if (code % 2 != 0) {
-              currentFileOffset++;
-            }
-            break;
+        if (!ctx.handleEscapeSequence(code, data, "RLE8")) {
+          // Absolute mode
+          ImageUtils.ensureBytesAvailable(
+              ctx.fileOffset,
+              code,
+              "RLE8 decoding error: Not enough data for absolute run of " + code + " pixels.",
+              data.length,
+              false);
+          ctx.x =
+              writeBIRLE8AbsoluteRun(
+                  pixels, code, displayRowMapOffset, displayRowMapMultiplier, ctx.x, ctx.y, ctx.fileOffset);
+          ctx.fileOffset += code;
+          if (code % 2 != 0) {
+            ctx.fileOffset++;
+          }
         }
       }
     }
@@ -702,12 +599,66 @@ public class BitmapParser implements IParser {
   }
 
   /**
-   * Writes an encoded run to the output pixel array. In encoded mode, a single color index is
+   * Calculates the file offset where bitfield mask data begins.
+   *
+   * <p>Bitfield masks appear after the file header and DIB header for formats using BI_BITFIELDS or
+   * BI_ALPHABITFIELDS compression.
+   *
+   * @return the byte offset to the start of bitfield mask data
+   */
+  private int calculateMaskDataOffset() {
+    return BitmapConstants.FILE_HEADER_SIZE + BitmapConstants.BITMAPINFOHEADER_SIZE;
+  }
+
+  /**
+   * Expands a 5-bit colour component (0-31) to an 8-bit component (0-255).
+   *
+   * <p>Used for converting RGB555 format pixels to RGB888.
+   *
+   * @param value the 5-bit colour value (0-31)
+   * @return the expanded 8-bit colour value (0-255)
+   */
+  private int expand5BitTo8Bit(int value) {
+    return value * BitmapConstants.MAX_8BIT_VALUE / BitmapConstants.RGB5_MAX;
+  }
+
+  /**
+   * Extracts the red component from a 16-bit RGB555 pixel.
+   *
+   * @param pixelData the 16-bit pixel value
+   * @return the red component (0-31)
+   */
+  private int extractRed5Bit(short pixelData) {
+    return (pixelData & BitmapConstants.RGB5_RED_MASK) >> 10;
+  }
+
+  /**
+   * Extracts the green component from a 16-bit RGB555 pixel.
+   *
+   * @param pixelData the 16-bit pixel value
+   * @return the green component (0-31)
+   */
+  private int extractGreen5Bit(short pixelData) {
+    return (pixelData & BitmapConstants.RGB5_GREEN_MASK) >> 5;
+  }
+
+  /**
+   * Extracts the blue component from a 16-bit RGB555 pixel.
+   *
+   * @param pixelData the 16-bit pixel value
+   * @return the blue component (0-31)
+   */
+  private int extractBlue5Bit(short pixelData) {
+    return pixelData & BitmapConstants.RGB5_BLUE_MASK;
+  }
+
+  /**
+   * Writes an encoded run to the output pixel array. In encoded mode, a single colour index is
    * repeated for the specified run length.
    *
    * @param pixels the 2D output pixel array
-   * @param runLength the number of pixels to write with the same color
-   * @param colourIndex the palette index for the color to use
+   * @param runLength the number of pixels to write with the same colour
+   * @param colourIndex the palette index for the colour to use
    * @param displayRowMapOffset row offset for display mapping
    * @param displayRowMapMultiplier direction for row mapping (1 for top-down, -1 for bottom-up)
    * @param currentX starting X coordinate
@@ -762,7 +713,7 @@ public class BitmapParser implements IParser {
 
     for (int i = 0; i < count; i++, currentX++) {
       if (isPixelInBounds(currentX, currentY, row, width, displayHeight)) {
-        int pixelIndex = data[currentFileOffset + i] & 0xFF;
+        int pixelIndex = data[currentFileOffset + i] & BitmapConstants.BYTE_MASK;
         pixels[row][currentX] = colourPalette.getColour(pixelIndex);
       }
     }
@@ -776,85 +727,62 @@ public class BitmapParser implements IParser {
       throw new IllegalArgumentException("BI_RLE4 compression is only valid for 4 bits per pixel.");
     }
 
-    int currentFileOffset = header.getOffset();
-    int currentX = 0;
-    int currentY = 0;
-    final int endOfLine = 0x00;
-    final int endOfBitmap = 0x01;
-    final int delta = 0x02;
+    RLEDecodingContext ctx = new RLEDecodingContext(header.getOffset());
 
-    while (currentFileOffset < data.length) {
-      if (currentFileOffset + 1 >= data.length) {
+    while (ctx.fileOffset < data.length && !ctx.endOfBitmap) {
+      if (ctx.fileOffset + 1 >= data.length) {
         break;
       }
-      int firstByte = data[currentFileOffset++] & 0xFF;
-      int secondByte = data[currentFileOffset++] & 0xFF;
 
-      if (firstByte != 0) { // Encoded mode
-        int runLength = firstByte;
-        int colorIndex1 = (secondByte >> 4) & 0x0F;
-        int colorIndex2 = secondByte & 0x0F;
+      int firstByte = data[ctx.fileOffset++] & BitmapConstants.BYTE_MASK;
 
-        currentX =
+      if (firstByte != 0) {
+        // Encoded mode
+        ImageUtils.ensureBytesAvailable(
+            ctx.fileOffset,
+            1,
+            "RLE4 decoding error: Missing colour index for encoded run.",
+            data.length,
+            false);
+        int secondByte = data[ctx.fileOffset++] & BitmapConstants.BYTE_MASK;
+        int colourIndex1 = (secondByte >> 4) & 0x0F;
+        int colourIndex2 = secondByte & 0x0F;
+        ctx.x =
             writeBIRLE4EncodedRun(
                 pixels,
-                runLength,
+                firstByte,
                 displayRowMapOffset,
                 displayRowMapMultiplier,
-                currentX,
-                currentY,
-                colorIndex1,
-                colorIndex2);
+                ctx.x,
+                ctx.y,
+                colourIndex1,
+                colourIndex2);
+      } else {
+        // Escape mode
+        ImageUtils.ensureBytesAvailable(
+            ctx.fileOffset,
+            1,
+            "RLE4 decoding error: Missing escape code parameter.",
+            data.length,
+            false);
+        int code = data[ctx.fileOffset++] & BitmapConstants.BYTE_MASK;
 
-      } else { // Escape mode
-        int code = secondByte;
-        switch (code) {
-          case endOfLine:
-            currentX = 0;
-            currentY++;
-            break;
-          case endOfBitmap:
-            return;
-          case delta:
-            ImageUtils.ensureBytesAvailable(
-                currentFileOffset,
-                2,
-                "RLE4 decoding error: Missing delta offsets (x, y).",
-                data.length,
-                true);
-            int dx = data[currentFileOffset++] & 0xFF;
-            int dy = data[currentFileOffset++] & 0xFF;
-            currentX += dx;
-            currentY += dy;
-            break;
-          default: // Absolute mode
-            int numPixels = code;
-            ImageUtils.ensureBytesAvailable(
-                currentFileOffset,
-                (numPixels + 1) / 2,
-                "RLE4 decoding error: Not enough data for absolute run of "
-                    + numPixels
-                    + " pixels.",
-                data.length,
-                false);
-
-            currentX =
-                writeBIRLE4AbsoluteRun(
-                    pixels,
-                    numPixels,
-                    displayRowMapOffset,
-                    displayRowMapMultiplier,
-                    currentX,
-                    currentY,
-                    currentFileOffset);
-
-            currentFileOffset += (numPixels + 1) / 2;
-
-            // Padding to WORD boundary
-            if ((numPixels + 1) / 2 % 2 != 0) {
-              currentFileOffset++;
-            }
-            break;
+        if (!ctx.handleEscapeSequence(code, data, "RLE4")) {
+          // Absolute mode
+          int bytesNeeded = (code + 1) / 2;
+          ImageUtils.ensureBytesAvailable(
+              ctx.fileOffset,
+              bytesNeeded,
+              "RLE4 decoding error: Not enough data for absolute run of " + code + " pixels.",
+              data.length,
+              false);
+          ctx.x =
+              writeBIRLE4AbsoluteRun(
+                  pixels, code, displayRowMapOffset, displayRowMapMultiplier, ctx.x, ctx.y, ctx.fileOffset);
+          ctx.fileOffset += bytesNeeded;
+          if (bytesNeeded % 2 != 0) {
+            ctx.fileOffset++;
+          }
         }
       }
     }
@@ -867,8 +795,8 @@ public class BitmapParser implements IParser {
       int displayRowMapMultiplier,
       int startX,
       int y,
-      int colorIndex1,
-      int colorIndex2) {
+      int colourIndex1,
+      int colourIndex2) {
     int x = startX;
     int width = dibHeader.getWidth();
     int displayHeight = Math.abs(dibHeader.getHeight());
@@ -876,11 +804,11 @@ public class BitmapParser implements IParser {
 
     for (int i = 0; i < runLength; i++) {
       if (isPixelInBounds(x, y, row, width, displayHeight)) {
-        int color =
+        int colour =
             (i % 2 == 0)
-                ? colourPalette.getColour(colorIndex1)
-                : colourPalette.getColour(colorIndex2);
-        pixels[row][x] = color;
+                ? colourPalette.getColour(colourIndex1)
+                : colourPalette.getColour(colourIndex2);
+        pixels[row][x] = colour;
       }
       x++;
     }
@@ -904,12 +832,12 @@ public class BitmapParser implements IParser {
     for (int i = 0; i < numPixels; i++) {
       if (isPixelInBounds(x, y, row, width, displayHeight)) {
         if (i % 2 == 0) {
-          currentByte = data[fileOffset + i / 2] & 0xFF;
-          int colorIndex = (currentByte >> 4) & 0x0F;
-          pixels[row][x] = colourPalette.getColour(colorIndex);
+          currentByte = data[fileOffset + i / 2] & BitmapConstants.BYTE_MASK;
+          int colourIndex = (currentByte >> 4) & 0x0F;
+          pixels[row][x] = colourPalette.getColour(colourIndex);
         } else {
-          int colorIndex = currentByte & 0x0F;
-          pixels[row][x] = colourPalette.getColour(colorIndex);
+          int colourIndex = currentByte & 0x0F;
+          pixels[row][x] = colourPalette.getColour(colourIndex);
         }
       }
       x++;
@@ -925,75 +853,123 @@ public class BitmapParser implements IParser {
    * packed in a fixed layout like RGB888. Instead, each channel is defined by a mask indicating
    * which bits in the pixel value represent that colour component.
    *
-   * <p>This method checks for specific extended DIB header types that define these masks:
-   *
-   * <ul>
-   *   <li>{@code BitmapV4Header} – provides red, green, blue, and alpha masks
-   *   <li>{@code BitmapV2InfoHeader} – provides red, green, and blue masks
-   *   <li>{@code BitmapV3InfoHeader} – provides red, green, blue, and alpha mask
-   * </ul>
-   *
-   * <p>If none of the headers provide masks, default masks are applied based on the bit depth:
-   *
-   * <ul>
-   *   <li>For 16bpp: RGB565 (5 red, 6 green, 5 blue)
-   *   <li>For 24bpp/32bpp: ARGB8888 format
-   * </ul>
+   * <p>This method checks for specific extended DIB header types that define these masks. If none
+   * provide masks, default masks are applied based on the bit depth.
    *
    * @return an array of 4 {@code long} values representing the red, green, blue, and alpha masks
    *     (in that order)
    */
   private long[] extractMasks() {
-    long redMask = 0;
-    long greenMask = 0;
-    long blueMask = 0;
-    long alphaMask = 0;
+    long[] masks;
 
-    // Handle both BitmapV4Header and BitmapV5Header
+    // Try extracting from V4/V5 headers first
     if (dibHeader instanceof BitmapV4Header) {
-      BitmapV4Header v4Header = (BitmapV4Header) dibHeader;
-      redMask = v4Header.getRedMask() & 0xFFFFFFFFL;
-      greenMask = v4Header.getGreenMask() & 0xFFFFFFFFL;
-      blueMask = v4Header.getBlueMask() & 0xFFFFFFFFL;
-      alphaMask = v4Header.getAlphaMask() & 0xFFFFFFFFL;
+      masks = extractV4Masks();
+    } else if (dibHeader instanceof BitmapV2InfoHeader) {
+      masks = extractV2Masks();
+    } else {
+      masks = new long[] {0, 0, 0, 0};
     }
 
-    // Handle both BitmapV2InfoHeader and BitmapV3InfoHeader. No need
-    // to handle alpha masks since documentation does not indicate so
-    if (dibHeader instanceof BitmapV2InfoHeader) {
-      BitmapV2InfoHeader v2Header = (BitmapV2InfoHeader) dibHeader;
-      redMask = v2Header.getRedMask();
-      greenMask = v2Header.getGreenMask();
-      blueMask = v2Header.getBlueMask();
+    // If no masks were found, use defaults based on bit depth
+    if (masks[0] == 0 && masks[1] == 0 && masks[2] == 0) {
+      masks = calculateDefaultMasks();
     }
 
-    // Fallback to common default masks if they were not explicitly found in headers
-    if (redMask == 0 && greenMask == 0 && blueMask == 0) {
-      int bpp = dibHeader.getBitsPerPixel();
-      if (bpp == 16) {
-        if (getCompression() == 3
-            && data.length
-                >= BitmapConstants.FILE_HEADER_SIZE
-                    + BitmapConstants.BITMAPINFOHEADER_SIZE
-                    + BitmapConstants.BI_PLANES_OFFSET) {
-          redMask = readInt(data, 54);
-          greenMask = readInt(data, 58);
-          blueMask = readInt(data, 62);
-        } else {
-          redMask = 0xF800;
-          greenMask = 0x07E0;
-          blueMask = 0x001F;
-        }
-        alphaMask = 0x0000;
-      } else if (bpp == 32) {
-        redMask = 0x00FF0000;
-        greenMask = 0x0000FF00;
-        blueMask = 0x000000FF;
-        alphaMask = InfoHeaderType.BITMAPINFOHEADER.equals(getDibHeaderType()) ? 0 : 0xFF000000L;
-      }
+    return masks;
+  }
+
+  /**
+   * Extracts colour masks from BITMAPV4HEADER or BITMAPV5HEADER.
+   *
+   * @return array of [red, green, blue, alpha] masks
+   */
+  private long[] extractV4Masks() {
+    BitmapV4Header v4Header = (BitmapV4Header) dibHeader;
+    return new long[] {
+      v4Header.getRedMask() & 0xFFFFFFFFL,
+      v4Header.getGreenMask() & 0xFFFFFFFFL,
+      v4Header.getBlueMask() & 0xFFFFFFFFL,
+      v4Header.getAlphaMask() & 0xFFFFFFFFL
+    };
+  }
+
+  /**
+   * Extracts colour masks from BITMAPV2INFOHEADER or BITMAPV3INFOHEADER.
+   *
+   * <p>Note: V2/V3 headers do not include alpha masks.
+   *
+   * @return array of [red, green, blue, 0] masks
+   */
+  private long[] extractV2Masks() {
+    BitmapV2InfoHeader v2Header = (BitmapV2InfoHeader) dibHeader;
+    return new long[] {v2Header.getRedMask(), v2Header.getGreenMask(), v2Header.getBlueMask(), 0};
+  }
+
+  /**
+   * Calculates default colour masks based on bits per pixel when no explicit masks are provided.
+   *
+   * @return array of [red, green, blue, alpha] default masks
+   */
+  private long[] calculateDefaultMasks() {
+    int bpp = dibHeader.getBitsPerPixel();
+
+    if (bpp == 16) {
+      return calculate16BppDefaultMasks();
+    } else if (bpp == 32) {
+      return calculate32BppDefaultMasks();
     }
 
-    return new long[] {redMask, greenMask, blueMask, alphaMask};
+    // For other bit depths, return zero masks
+    return new long[] {0, 0, 0, 0};
+  }
+
+  /**
+   * Calculates default masks for 16-bit pixels.
+   *
+   * <p>Attempts to read explicit masks from file if BI_BITFIELDS compression is used, otherwise
+   * defaults to RGB565 format.
+   *
+   * @return array of [red, green, blue, alpha] masks for 16bpp
+   */
+  private long[] calculate16BppDefaultMasks() {
+    long redMask;
+    long greenMask;
+    long blueMask;
+
+    if (getCompression() == BitmapConstants.BI_BITFIELDS
+        && data.length >= calculateMaskDataOffset() + BitmapConstants.BI_PLANES_OFFSET) {
+      int maskOffset = calculateMaskDataOffset();
+      redMask = readInt(data, maskOffset);
+      greenMask = readInt(data, maskOffset + 4);
+      blueMask = readInt(data, maskOffset + 8);
+    } else {
+      // Default to RGB565 format
+      redMask = BitmapConstants.RGB565_RED_MASK;
+      greenMask = BitmapConstants.RGB565_GREEN_MASK;
+      blueMask = BitmapConstants.RGB565_BLUE_MASK;
+    }
+
+    return new long[] {redMask, greenMask, blueMask, 0x0000};
+  }
+
+  /**
+   * Calculates default masks for 32-bit pixels (ARGB8888 format).
+   *
+   * @return array of [red, green, blue, alpha] masks for 32bpp
+   */
+  private long[] calculate32BppDefaultMasks() {
+    long alphaMask =
+        InfoHeaderType.BITMAPINFOHEADER.equals(getDibHeaderType())
+            ? 0
+            : BitmapConstants.RGB8_ALPHA_MASK;
+
+    return new long[] {
+      BitmapConstants.RGB8_RED_MASK,
+      BitmapConstants.RGB8_GREEN_MASK,
+      BitmapConstants.RGB8_BLUE_MASK,
+      alphaMask
+    };
   }
 
   /**
@@ -1160,15 +1136,14 @@ public class BitmapParser implements IParser {
       return colourPalette.hasAlphaChannel();
     }
 
-    int width = dibHeader.getWidth();
-    int height = Math.abs(dibHeader.getHeight());
-    int offset = header.getOffset();
-
-    for (int col = 0; col < width; col++) {
-      for (int row = 0; row < height; row++) {
-        int argb = data[col * row + offset];
-        int alpha = (argb >> 24) & 0xFF;
-        if (alpha != 255) {
+    // For non-palette images, check if any pixel has non-opaque alpha
+    // Use existing getPixels() to handle all compression formats correctly
+    int[][] pixels = getPixels();
+    for (int row = 0; row < pixels.length; row++) {
+      for (int col = 0; col < pixels[row].length; col++) {
+        int argb = pixels[row][col];
+        int alpha = (argb >> 24) & BitmapConstants.BYTE_MASK;
+        if (alpha != BitmapConstants.OPAQUE_ALPHA) {
           return true;
         }
       }
@@ -1181,12 +1156,8 @@ public class BitmapParser implements IParser {
    * Reads and returns the pixel data as a 2D array of ARGB integers. Each integer represents a
    * pixel in AARRGGBB format.
    *
-   * @return A 2D array (height x width) of pixel data.
-   * @throws IllegalStateException If the image data cannot be read (e.g., parser not initialized,
-   *     colour palette missing, or unsupported compression).
-   * @throws IllegalArgumentException If header values lead to invalid data access.
-   * @throws UnsupportedOperationException If the specific bit depth or compression is not
-   *     implemented.
+   * @return A 2D array (height x width) of pixel data
+   * @throws UnsupportedOperationException if the compression type is not supported
    */
   @Override
   public int[][] getPixels() {
@@ -1203,22 +1174,22 @@ public class BitmapParser implements IParser {
 
     // Handle Compression
     try {
-      if (compression == 0) {
+      if (compression == BitmapConstants.BI_RGB) {
         readUncompressedPixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
-      } else if (compression == 1) {
+      } else if (compression == BitmapConstants.BI_RLE8) {
         readRLE8Pixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
-      } else if (compression == 3) {
+      } else if (compression == BitmapConstants.BI_BITFIELDS) {
         readBitfieldPixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
-      } else if (compression == 2) {
+      } else if (compression == BitmapConstants.BI_RLE4) {
         readRLE4Pixels(pixels, displayRowMapMultiplier, displayRowMapOffset);
-      } else if (compression == 4 || compression == 5) {
+      } else if (compression == BitmapConstants.BI_JPEG || compression == BitmapConstants.BI_PNG) {
         throw new UnsupportedOperationException(
             "JPEG or PNG embedded compression is not supported for direct pixel reading.");
       } else {
         throw new UnsupportedOperationException("Unsupported BMP compression type: " + compression);
       }
     } catch (CorruptedImageException e) {
-      LOGGER.log(Level.SEVERE, e::getMessage);
+      LOGGER.log(Level.SEVERE, "Failed to read pixel data: {0}", e.getMessage());
     }
 
     return pixels;

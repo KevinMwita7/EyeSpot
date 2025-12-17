@@ -143,4 +143,76 @@ public final class BitmapConstants {
 
   /** Offset to the reserved field (usually zero). */
   public static final int BV5_RESERVED_OFFSET = 120;
+
+  // --- Compression Types ---
+  /** No compression (BI_RGB). */
+  public static final int BI_RGB = 0;
+
+  /** RLE 8-bit/pixel compression (BI_RLE8). */
+  public static final int BI_RLE8 = 1;
+
+  /** RLE 4-bit/pixel compression (BI_RLE4). */
+  public static final int BI_RLE4 = 2;
+
+  /** Bitfield compression (BI_BITFIELDS). */
+  public static final int BI_BITFIELDS = 3;
+
+  /** JPEG compression (BI_JPEG). Not supported for direct pixel reading. */
+  public static final int BI_JPEG = 4;
+
+  /** PNG compression (BI_PNG). Not supported for direct pixel reading. */
+  public static final int BI_PNG = 5;
+
+  /** Alpha bitfield compression (BI_ALPHABITFIELDS). */
+  public static final int BI_ALPHABITFIELDS = 6;
+
+  // --- Bit Manipulation Constants ---
+  /** Mask for extracting a single byte (0xFF). */
+  public static final int BYTE_MASK = 0xFF;
+
+  /** Opaque alpha value (fully opaque). */
+  public static final int OPAQUE_ALPHA = 0xFF;
+
+  /** Maximum value for 8-bit colour component. */
+  public static final int MAX_8BIT_VALUE = 255;
+
+  /** Maximum value for 5-bit colour component (used in RGB555). */
+  public static final int RGB5_MAX = 31;
+
+  /** Red channel mask for RGB555 format (5 bits). */
+  public static final int RGB5_RED_MASK = 0x7C00;
+
+  /** Green channel mask for RGB555 format (5 bits). */
+  public static final int RGB5_GREEN_MASK = 0x03E0;
+
+  /** Blue channel mask for RGB555 format (5 bits). */
+  public static final int RGB5_BLUE_MASK = 0x001F;
+
+  /** Default 16-bit RGB565 red mask. */
+  public static final int RGB565_RED_MASK = 0xF800;
+
+  /** Default 16-bit RGB565 green mask. */
+  public static final int RGB565_GREEN_MASK = 0x07E0;
+
+  /** Default 16-bit RGB565 blue mask. */
+  public static final int RGB565_BLUE_MASK = 0x001F;
+
+  /** Default 32-bit red mask (ARGB8888). */
+  public static final long RGB8_RED_MASK = 0x00FF0000L;
+
+  /** Default 32-bit green mask (ARGB8888). */
+  public static final long RGB8_GREEN_MASK = 0x0000FF00L;
+
+  /** Default 32-bit blue mask (ARGB8888). */
+  public static final long RGB8_BLUE_MASK = 0x000000FFL;
+
+  /** Default 32-bit alpha mask (ARGB8888). */
+  public static final long RGB8_ALPHA_MASK = 0xFF000000L;
+
+  // --- Bitfield Mask Data Block Sizes ---
+  /** Size of bitfield mask data for BI_BITFIELDS with 3 masks (12 bytes). */
+  public static final int BITFIELD_MASKS_SIZE_V3 = 12;
+
+  /** Size of bitfield mask data for BI_ALPHABITFIELDS with 4 masks (16 bytes). */
+  public static final int BITFIELD_MASKS_SIZE_V4 = 16;
 }

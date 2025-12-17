@@ -171,7 +171,8 @@ class PictureTest {
 
   @Test
   void GivenPicture_WhenCheckAlphaChannel_ThenReturnsCorrectValue() {
-    assertTrue(picture.hasAlpha());
+    // minimal.bmp is a 24bpp RGB image without an alpha channel
+    assertFalse(picture.hasAlpha());
   }
 
   @Test
